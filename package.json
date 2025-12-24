@@ -1,0 +1,27 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@clerk/express": "^1.7.57",
+    "body-parser": "^2.2.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "expo-server-sdk": "^4.0.0",
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2",
+    "nodemon": "^3.1.11",
+    "pg": "^8.16.3",
+    "svix": "^1.82.0",
+    "twilio": "^5.10.7"
+  }
+}

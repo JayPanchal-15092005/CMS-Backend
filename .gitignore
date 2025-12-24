@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Optional: Editor/OS files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Optional: Testing/Coverage
+coverage/
+
+# Firebase Admin SDK key
+src/config/*.json
