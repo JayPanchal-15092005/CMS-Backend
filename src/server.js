@@ -338,9 +338,10 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       [clerkUserId]
     );
 
-    if (!devices.rows.length) {
-      console.log("⚠️ No devices found for user:", clerkUserId);
-    }
+   if (devices.rows.length === 0) {
+  console.warn("⚠️ No device registered for clerk_user_id:", clerkUserId);
+}
+
     console.log("📲 Sending to tokens:", devices.rows);
 
     // 3️⃣ Prepare notifications
