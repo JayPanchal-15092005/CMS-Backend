@@ -307,6 +307,10 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       `SELECT expo_push_token FROM user_devices WHERE clerk_user_id = $1`,
       [clerkUserId]
     );
+
+    if (!devices.rows.length) {
+      console.log("⚠️ No devices found for user:", clerkUserId);
+    }
     console.log("📲 Sending to tokens:", devices.rows);
 
     // 3️⃣ Prepare notifications
