@@ -238,27 +238,57 @@ app.get("/api/employee/complaints/:id", requireAuth(), async (req, res) => {
 /* =========================
    SAVE EXPO PUSH TOKEN
 ========================= */
+// app.post("/api/devices/register", requireAuth(), async (req, res) => {
+//   try {
+//     const clerkUserId = req.auth.userId;
+//     const { expoPushToken } = req.body;
+
+//     if (!Expo.isExpoPushToken(expoPushToken)) {
+//       return res.status(400).json({ error: "Invalid Expo token" });
+//     }
+
+//     await pool.query(
+//       `
+//      INSERT INTO user_devices (clerk_user_id, expo_push_token)
+//      VALUES ($1, $2)
+//      ON CONFLICT DO NOTHING
+//      `,
+//       [clerkUserId, expoPushToken]
+//     );
+
+//     res.json({ success: true });
+//   } catch (error) {
+//     console.error("❌ Register device error:", error);
+//     res.status(500).json({ error: "internal_server_error" });
+//   }
+// });
+
 app.post("/api/devices/register", requireAuth(), async (req, res) => {
   try {
+    console.log("📥 Register device called");
+
+    console.log("🔐 Auth:", req.auth);
+    console.log("📦 Body:", req.body);
+
     const clerkUserId = req.auth.userId;
     const { expoPushToken } = req.body;
 
-    if (!Expo.isExpoPushToken(expoPushToken)) {
-      return res.status(400).json({ error: "Invalid Expo token" });
-    }
+    console.log("👤 Clerk User:", clerkUserId);
+    console.log("📱 Token:", expoPushToken);
 
     await pool.query(
       `
-     INSERT INTO user_devices (clerk_user_id, expo_push_token)
-     VALUES ($1, $2)
-     ON CONFLICT (expo_push_token) DO NOTHING
-     `,
+      INSERT INTO user_devices (clerk_user_id, expo_push_token)
+      VALUES ($1, $2)
+      `,
       [clerkUserId, expoPushToken]
     );
 
+    console.log("✅ Token inserted");
+
     res.json({ success: true });
-  } catch (error) {
-    console.error("❌ Register device error:", error);
+  } catch (err) {
+    console.error("❌ Register device error:", err);
     res.status(500).json({ error: "internal_server_error" });
   }
 });
