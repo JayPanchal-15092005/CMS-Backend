@@ -244,10 +244,11 @@ app.post("/api/devices/register", requireAuth(), async (req, res) => {
     const { expoPushToken } = req.body;
 
     if (!clerkUserId || !expoPushToken) {
-      return res.status(400).json({ error: "Missing userId or token" });
+      return res.status(400).json({ error: "Missing data" });
     }
 
-    // 🟢 Use UPSERT logic: If token exists, update the user; if not, insert new.
+    // 🟢 ON CONFLICT ensures that if the token is already in the DB, 
+    // it just updates the user_id instead of failing.
     await pool.query(
       `
       INSERT INTO user_devices (clerk_user_id, expo_push_token)
@@ -258,11 +259,10 @@ app.post("/api/devices/register", requireAuth(), async (req, res) => {
       [clerkUserId, expoPushToken]
     );
 
-    console.log(`✅ Token registered/updated for: ${clerkUserId}`);
     res.json({ success: true });
   } catch (err) {
-    console.error("❌ Registration Error:", err.message);
-    res.status(500).json({ error: "Database registration failed" });
+    console.error("❌ DB Error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 /* =========================
