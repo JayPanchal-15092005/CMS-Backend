@@ -243,26 +243,26 @@ app.post("/api/devices/register", requireAuth(), async (req, res) => {
     const clerkUserId = req.auth.userId;
     const { expoPushToken } = req.body;
 
-    if (!Expo.isExpoPushToken(expoPushToken)) {
-      return res.status(400).json({ error: "Invalid Expo token" });
+    if (!clerkUserId || !expoPushToken) {
+      return res.status(400).json({ error: "Missing userId or token" });
     }
 
-    // 🟢 Use ON CONFLICT to prevent errors if the token is already there
+    // 🟢 Use UPSERT logic: If token exists, update the user; if not, insert new.
     await pool.query(
       `
       INSERT INTO user_devices (clerk_user_id, expo_push_token)
       VALUES ($1, $2)
-      ON CONFLICT (expo_push_token) DO UPDATE 
-      SET clerk_user_id = EXCLUDED.clerk_user_id
+      ON CONFLICT (expo_push_token) 
+      DO UPDATE SET clerk_user_id = EXCLUDED.clerk_user_id, created_at = NOW()
       `,
       [clerkUserId, expoPushToken]
     );
 
-    console.log(`✅ Token registered for user: ${clerkUserId}`);
+    console.log(`✅ Token registered/updated for: ${clerkUserId}`);
     res.json({ success: true });
   } catch (err) {
-    console.error("❌ Register device error:", err);
-    res.status(500).json({ error: "internal_server_error" });
+    console.error("❌ Registration Error:", err.message);
+    res.status(500).json({ error: "Database registration failed" });
   }
 });
 /* =========================
@@ -310,9 +310,9 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       [clerkUserId]
     );
 
-   if (devices.rows.length === 0) {
-  console.warn("⚠️ No device registered for clerk_user_id:", clerkUserId);
-}
+    if (devices.rows.length === 0) {
+      console.warn("⚠️ No device registered for clerk_user_id:", clerkUserId);
+    }
 
     console.log("📲 Sending to tokens:", devices.rows);
 
