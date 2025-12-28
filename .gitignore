@@ -20,3 +20,5 @@ coverage/
 
 # Firebase Admin SDK key
 src/config/*.json
+folderico-azure.ico
+desktop.ini
