@@ -167,9 +167,15 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
           const message = `
                 🆕 New Complaint
                 ID: ${complaint.id}
+                Email: ${submitter_email || "N/A"}
+                Name: ${submitter_name || "Anonymous"}
+                Complaint: ${complain_detail}
                 Department: ${department}
                 Priority: ${priority || "Medium"}
-                          `.trim();
+                Location: ${complain_location || "N/A"}
+                To whom: ${to_whom || "N/A"}          
+                `.trim();
+                
 
           await twilioClient.messages.create({
             from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
