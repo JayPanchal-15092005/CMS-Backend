@@ -156,6 +156,27 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 
     const complaint = result.rows[0];
 
+    (async () => {
+  try {
+    const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
+    
+    const adminMessages = adminDevices.rows.map(admin => ({
+      to: admin.expo_push_token,
+      sound: "default",
+      title: "🚨 New Complaint Received",
+      body: `New ${complaint.priority} priority task for ${complaint.department}.`,
+      data: { complaintId: complaint.id, screen: "admin-details" },
+    }));
+
+    if (adminMessages.length > 0) {
+      await expo.sendPushNotificationsAsync(adminMessages);
+      console.log("🔔 Admins notified of new complaint");
+    }
+  } catch (err) {
+    console.error("❌ Admin notification failed:", err);
+  }
+})();
+
     // WhatsApp (non-blocking)
     if (
       process.env.TWILIO_ACCOUNT_SID &&
@@ -343,6 +364,21 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
   } catch (err) {
     console.error("❌ Resolve error:", err);
     res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
+app.post("/api/admin/devices/register", async (req, res) => {
+  const { email, expoPushToken } = req.body;
+  try {
+    await pool.query(
+      `INSERT INTO admin_devices (email, expo_push_token)
+       VALUES ($1, $2)
+       ON CONFLICT (expo_push_token) DO UPDATE SET email = EXCLUDED.email`,
+      [email, expoPushToken]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
