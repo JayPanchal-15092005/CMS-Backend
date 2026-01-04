@@ -399,7 +399,9 @@ app.get("/api/admin/complaints/:id", async (req, res) => {
         assets,
         priority,
         status,
-        created_at
+        created_at,
+        submitter_name,
+         submitter_email
       FROM complaints
       WHERE id = $1
       `,
