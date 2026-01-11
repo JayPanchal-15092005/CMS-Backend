@@ -634,9 +634,7 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
 // });
 
 app.post("/api/admin/devices/register", async (req, res) => {
-  console.log("\n📱 ========================================");
-  console.log("📱 ADMIN DEVICE REGISTRATION REQUEST");
-  console.log("📱 ========================================\n");
+  console.log("\n📱 ADMIN DEVICE REGISTRATION REQUEST\n");
   
   try {
     const { email, password, expoPushToken, deviceInfo } = req.body;
@@ -644,15 +642,13 @@ app.post("/api/admin/devices/register", async (req, res) => {
     console.log("📧 Email:", email);
     console.log("📱 Token:", expoPushToken);
 
-    // Validate required fields
     if (!email || !expoPushToken) {
-      console.error("❌ Missing required fields");
       return res.status(400).json({ 
         error: "Email and expoPushToken are required" 
       });
     }
 
-    // ✅ FIXED: Check if credentials match ANY admin in the array
+    // Check credentials
     const isValidAdmin = ADMIN_USERS.some(
       admin => admin.email === email && admin.password === password
     );
@@ -664,32 +660,28 @@ app.post("/api/admin/devices/register", async (req, res) => {
       });
     }
 
-    console.log("✅ Admin credentials verified:", email);
+    console.log("✅ Admin credentials verified");
 
-    // Validate token format
     if (!Expo.isExpoPushToken(expoPushToken)) {
-      console.error("❌ Invalid Expo Push Token format");
+      console.error("❌ Invalid token format");
       return res.status(400).json({ 
         error: "Invalid Expo Push Token format" 
       });
     }
 
-    console.log("✅ Token format valid");
-
-    // Save to database
+    // ✅ FIXED: Remove device_info from query
     const result = await pool.query(
-      `INSERT INTO admin_devices (email, expo_push_token, device_info, updated_at)
-       VALUES ($1, $2, $3, NOW())
+      `INSERT INTO admin_devices (email, expo_push_token, updated_at)
+       VALUES ($1, $2, NOW())
        ON CONFLICT (expo_push_token) 
        DO UPDATE SET 
          email = EXCLUDED.email,
-         device_info = EXCLUDED.device_info,
          updated_at = NOW()
        RETURNING *`,
-      [email, expoPushToken, JSON.stringify(deviceInfo || {})]
+      [email, expoPushToken] // Removed device_info parameter
     );
 
-    console.log("✅ Device registered:", result.rows[0].id);
+    console.log("✅ Device registered:", result.rows[0]);
 
     res.json({ 
       success: true, 
