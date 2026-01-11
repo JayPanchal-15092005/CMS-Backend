@@ -244,15 +244,9 @@ app.get("/health", (req, res) => {
 // });
 
 
-// Submit Complaint with Push Notifications
 app.post("/api/complaints", requireAuth(), async (req, res) => {
-  console.log("\n📝 ========================================");
-  console.log("📝 NEW COMPLAINT SUBMITTED");
-  console.log("📝 ========================================\n");
-  
   try {
     const clerkUserId = req.auth.userId;
-
     const {
       submitter_name,
       submitter_email,
@@ -265,34 +259,26 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     } = req.body;
 
     if (!department || !complain_detail) {
-      return res.status(400).json({ 
-        error: "department and complain_detail required" 
-      });
+      return res.status(400).json({ error: "department and complain_detail required" });
     }
 
-    // Insert complaint
+    // FIX: Ensure assets is a valid JSON string for Postgres jsonb column
+    const assetsJson = JSON.stringify(assets || []);
+
     const result = await pool.query(
       `INSERT INTO complaints (
-        clerk_user_id,
-        submitter_name,
-        submitter_email,
-        department,
-        assets,
-        complain_detail,
-        complain_location,
-        to_whom,
-        priority,
-        status,
-        created_at
+        clerk_user_id, submitter_name, submitter_email, department, 
+        assets, complain_detail, complain_location, to_whom, 
+        priority, status, created_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Pending',NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Pending', NOW())
       RETURNING *`,
       [
         clerkUserId,
         submitter_name?.trim() || "Anonymous",
         submitter_email || null,
         department,
-        JSON.stringify(assets || []),
+        assetsJson, // Passed as string to prevent Postgres array format error
         complain_detail,
         complain_location || null,
         to_whom || null,
@@ -301,171 +287,32 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     );
 
     const complaint = result.rows[0];
-    console.log("✅ Complaint ID:", complaint.id);
-    console.log("✅ Department:", department);
-    console.log("✅ Priority:", priority);
 
-    // Send Push Notifications (Non-blocking)
+    // Notification logic (Non-blocking)
     setImmediate(async () => {
       try {
-        console.log("\n🔔 ========================================");
-        console.log("🔔 SENDING PUSH NOTIFICATIONS");
-        console.log("🔔 ========================================\n");
-
-        // Get all admin devices
-        const adminDevices = await pool.query(
-          "SELECT expo_push_token, email, device_info FROM admin_devices"
-        );
-
-        console.log(`📱 Found ${adminDevices.rows.length} admin device(s)`);
-
-        if (adminDevices.rows.length === 0) {
-          console.log("⚠️  No admin devices registered!");
-          console.log("   Make sure admin app is installed and opened at least once.");
-          return;
-        }
-
-        // Log each device
-        adminDevices.rows.forEach((device, index) => {
-          console.log(`\nDevice ${index + 1}:`);
-          console.log("  Email:", device.email);
-          console.log("  Token:", device.expo_push_token);
-        });
-
-        // Prepare messages
-        const messages = [];
-        for (const device of adminDevices.rows) {
-          if (!Expo.isExpoPushToken(device.expo_push_token)) {
-            console.error(`❌ Invalid token for ${device.email}:`, device.expo_push_token);
-            continue;
-          }
-
-          messages.push({
-            to: device.expo_push_token,
+        const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
+        const messages = adminDevices.rows
+          .filter(admin => Expo.isExpoPushToken(admin.expo_push_token))
+          .map(admin => ({
+            to: admin.expo_push_token,
             sound: "default",
             title: "🚨 New Complaint",
-            body: `${priority || 'Medium'} priority - ${department}`,
-            data: { 
-              complaintId: complaint.id,
-              department: department,
-              priority: priority,
-            },
-            priority: "high",
-            channelId: "default",
-          });
+            body: `${priority} priority - ${department}`,
+            data: { complaintId: complaint.id },
+          }));
+
+        if (messages.length > 0) {
+          await expo.sendPushNotificationsAsync(messages);
         }
-
-        console.log(`\n📤 Preparing to send ${messages.length} notification(s)...`);
-
-        if (messages.length === 0) {
-          console.log("⚠️  No valid tokens to send to");
-          return;
-        }
-
-        // Send in chunks
-        const chunks = expo.chunkPushNotifications(messages);
-        console.log(`📦 Split into ${chunks.length} chunk(s)`);
-
-        for (let i = 0; i < chunks.length; i++) {
-          try {
-            console.log(`\n📤 Sending chunk ${i + 1}/${chunks.length}...`);
-            const ticketChunk = await expo.sendPushNotificationsAsync(chunks[i]);
-            
-            console.log(`✅ Chunk ${i + 1} sent`);
-            console.log("Tickets:", ticketChunk);
-
-            // Check for errors
-            ticketChunk.forEach((ticket, idx) => {
-              if (ticket.status === 'error') {
-                console.error(`❌ Ticket ${idx} error:`, ticket.message);
-                if (ticket.details) {
-                  console.error("   Details:", ticket.details);
-                }
-              } else {
-                console.log(`✅ Ticket ${idx} success:`, ticket.id);
-              }
-            });
-          } catch (error) {
-            console.error(`❌ Error sending chunk ${i + 1}:`, error);
-          }
-        }
-
-        console.log("\n✅ ========================================");
-        console.log("✅ NOTIFICATIONS SENT!");
-        console.log("✅ ========================================\n");
       } catch (err) {
-        console.error("\n❌ ========================================");
-        console.error("❌ NOTIFICATION SENDING FAILED!");
-        console.error("❌ ========================================\n");
-        console.error("Error:", err);
+        console.error("Notification failed:", err);
       }
     });
 
-    // Send WhatsApp Message to Manager (Non-blocking)
-    if (
-      process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_WHATSAPP_FROM &&
-      process.env.MANAGER_WHATSAPP
-    ) {
-      setImmediate(async () => {
-        try {
-          console.log("\n📱 ========================================");
-          console.log("📱 SENDING WHATSAPP MESSAGE");
-          console.log("📱 ========================================\n");
-
-          const message = `
-🆕 *New Complaint Received*
-
-📋 *Complaint ID:* ${complaint.id}
-👤 *Submitted by:* ${submitter_name || "Anonymous"}
-📧 *Email:* ${submitter_email || "N/A"}
-
-🏢 *Department:* ${department}
-⚠️ *Priority:* ${priority || "Medium"}
-📍 *Location:* ${complain_location || "N/A"}
-👷 *Assigned to:* ${to_whom || "N/A"}
-
-📝 *Complaint Details:*
-${complain_detail}
-
-🔗 Check admin dashboard for more details.
-          `.trim();
-
-          console.log("📤 Sending to:", process.env.MANAGER_WHATSAPP);
-
-          await twilioClient.messages.create({
-            from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
-            to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
-            body: message,
-          });
-
-          console.log("\n✅ ========================================");
-          console.log("✅ WHATSAPP MESSAGE SENT!");
-          console.log("✅ ========================================\n");
-        } catch (e) {
-          console.error("\n❌ ========================================");
-          console.error("❌ WHATSAPP MESSAGE FAILED!");
-          console.error("❌ ========================================\n");
-          console.error("Error:", e.message);
-          if (e.code) console.error("Code:", e.code);
-          if (e.moreInfo) console.error("More Info:", e.moreInfo);
-        }
-      });
-    } else {
-      console.log("\n⚠️  WhatsApp not configured");
-      console.log("   Set these environment variables:");
-      console.log("   - TWILIO_ACCOUNT_SID");
-      console.log("   - TWILIO_WHATSAPP_FROM");
-      console.log("   - MANAGER_WHATSAPP\n");
-    }
-
-    res.status(201).json({
-      success: true,
-      id: complaint.id,
-      status: complaint.status,
-    });
+    res.status(201).json({ success: true, id: complaint.id });
   } catch (err) {
-    console.error("❌ Submit complaint error:", err);
+    console.error("❌ Submit error:", err);
     res.status(500).json({ error: "internal_server_error" });
   }
 });
