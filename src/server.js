@@ -125,128 +125,10 @@ app.get("/health", (req, res) => {
 /* =========================
    EMPLOYEE: SUBMIT COMPLAINT
 ========================= */
-// app.post("/api/complaints", requireAuth(), async (req, res) => {
-//   try {
-//     const clerkUserId = req.auth.userId;
-
-//     const {
-//       submitter_name,
-//       submitter_email,
-//       department,
-//       assets,
-//       complain_detail,
-//       complain_location,
-//       to_whom,
-//       priority,
-//     } = req.body;
-
-//     if (!department || !complain_detail) {
-//       return res
-//         .status(400)
-//         .json({ error: "department and complain_detail required" });
-//     }
-
-//     const result = await pool.query(
-//       `
-//       INSERT INTO complaints (
-//         clerk_user_id,
-//         submitter_name,
-//         submitter_email,
-//         department,
-//         assets,
-//         complain_detail,
-//         complain_location,
-//         to_whom,
-//         priority,
-//         status,
-//         created_at
-//       )
-//       VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,'Pending',NOW())
-//       RETURNING *
-//       `,
-//       [
-//         clerkUserId,
-//         submitter_name?.trim() || "Anonymous",
-//         submitter_email || null,
-//         department,
-//         JSON.stringify(assets || []),
-//         complain_detail,
-//         complain_location || null,
-//         to_whom || null,
-//         priority || "Medium",
-//       ]
-//     );
-
-//     const complaint = result.rows[0];
-
-//     (async () => {
-//   try {
-//     const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
-    
-//     const adminMessages = adminDevices.rows.map(admin => ({
-//       to: admin.expo_push_token,
-//       sound: "default",
-//       title: "🚨 New Complaint Received",
-//       body: `New ${complaint.priority} priority task for ${complaint.department}.`,
-//       data: { complaintId: complaint.id, screen: "admin-details" },
-//     }));
-
-//     if (adminMessages.length > 0) {
-//       await expo.sendPushNotificationsAsync(adminMessages);
-//       console.log("🔔 Admins notified of new complaint");
-//     }
-//   } catch (err) {
-//     console.error("❌ Admin notification failed:", err);
-//   }
-// })();
-
-//     // WhatsApp (non-blocking)
-//     if (
-//       process.env.TWILIO_ACCOUNT_SID &&
-//       process.env.TWILIO_WHATSAPP_FROM &&
-//       process.env.MANAGER_WHATSAPP
-//     ) {
-//       (async () => {
-//         try {
-//           const message = `
-//                 🆕 New Complaint
-//                 ID: ${complaint.id}
-//                 Email: ${submitter_email || "N/A"}
-//                 Name: ${submitter_name || "Anonymous"}
-//                 Complaint: ${complain_detail}
-//                 Department: ${department}
-//                 Priority: ${priority || "Medium"}
-//                 Location: ${complain_location || "N/A"}
-//                 To whom: ${to_whom || "N/A"}          
-//                 `.trim();
-                
-
-//           await twilioClient.messages.create({
-//             from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
-//             to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
-//             body: message,
-//           });
-//         } catch (e) {
-//           console.error("⚠️ WhatsApp failed:", e.message);
-//         }
-//       })();
-//     }
-
-//     res.status(201).json({
-//       success: true,
-//       id: complaint.id,
-//       status: complaint.status,
-//     });
-//   } catch (err) {
-//     console.error("❌ Submit complaint error:", err);
-//     res.status(500).json({ error: "internal_server_error" });
-//   }
-// });
-
-
 app.post("/api/complaints", requireAuth(), async (req, res) => {
   try {
     const clerkUserId = req.auth.userId;
+
     const {
       submitter_name,
       submitter_email,
@@ -259,26 +141,35 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     } = req.body;
 
     if (!department || !complain_detail) {
-      return res.status(400).json({ error: "department and complain_detail required" });
+      return res
+        .status(400)
+        .json({ error: "department and complain_detail required" });
     }
 
-    // FIX: Ensure assets is a valid JSON string for Postgres jsonb column
-    const assetsJson = JSON.stringify(assets || []);
-
     const result = await pool.query(
-      `INSERT INTO complaints (
-        clerk_user_id, submitter_name, submitter_email, department, 
-        assets, complain_detail, complain_location, to_whom, 
-        priority, status, created_at
+      `
+      INSERT INTO complaints (
+        clerk_user_id,
+        submitter_name,
+        submitter_email,
+        department,
+        assets,
+        complain_detail,
+        complain_location,
+        to_whom,
+        priority,
+        status,
+        created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Pending', NOW())
-      RETURNING *`,
+      VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,'Pending',NOW())
+      RETURNING *
+      `,
       [
         clerkUserId,
         submitter_name?.trim() || "Anonymous",
         submitter_email || null,
         department,
-        assetsJson, // Passed as string to prevent Postgres array format error
+        JSON.stringify(assets || []),
         complain_detail,
         complain_location || null,
         to_whom || null,
@@ -288,31 +179,66 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 
     const complaint = result.rows[0];
 
-    // Notification logic (Non-blocking)
-    setImmediate(async () => {
-      try {
-        const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
-        const messages = adminDevices.rows
-          .filter(admin => Expo.isExpoPushToken(admin.expo_push_token))
-          .map(admin => ({
-            to: admin.expo_push_token,
-            sound: "default",
-            title: "🚨 New Complaint",
-            body: `${priority} priority - ${department}`,
-            data: { complaintId: complaint.id },
-          }));
+    (async () => {
+  try {
+    const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
+    
+    const adminMessages = adminDevices.rows.map(admin => ({
+      to: admin.expo_push_token,
+      sound: "default",
+      title: "🚨 New Complaint Received",
+      body: `New ${complaint.priority} priority task for ${complaint.department}.`,
+      data: { complaintId: complaint.id, screen: "admin-details" },
+    }));
 
-        if (messages.length > 0) {
-          await expo.sendPushNotificationsAsync(messages);
-        }
-      } catch (err) {
-        console.error("Notification failed:", err);
-      }
-    });
-
-    res.status(201).json({ success: true, id: complaint.id });
+    if (adminMessages.length > 0) {
+      await expo.sendPushNotificationsAsync(adminMessages);
+      console.log("🔔 Admins notified of new complaint");
+    }
   } catch (err) {
-    console.error("❌ Submit error:", err);
+    console.error("❌ Admin notification failed:", err);
+  }
+})();
+
+    // WhatsApp (non-blocking)
+    if (
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_WHATSAPP_FROM &&
+      process.env.MANAGER_WHATSAPP
+    ) {
+      (async () => {
+        try {
+          const message = `
+                🆕 New Complaint
+                ID: ${complaint.id}
+                Email: ${submitter_email || "N/A"}
+                Name: ${submitter_name || "Anonymous"}
+                Complaint: ${complain_detail}
+                Department: ${department}
+                Priority: ${priority || "Medium"}
+                Location: ${complain_location || "N/A"}
+                To whom: ${to_whom || "N/A"}          
+                `.trim();
+                
+
+          await twilioClient.messages.create({
+            from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
+            to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
+            body: message,
+          });
+        } catch (e) {
+          console.error("⚠️ WhatsApp failed:", e.message);
+        }
+      })();
+    }
+
+    res.status(201).json({
+      success: true,
+      id: complaint.id,
+      status: complaint.status,
+    });
+  } catch (err) {
+    console.error("❌ Submit complaint error:", err);
     res.status(500).json({ error: "internal_server_error" });
   }
 });
@@ -465,85 +391,20 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
   }
 });
 
-// app.post("/api/admin/devices/register", async (req, res) => {
-//   const { email, expoPushToken } = req.body;
-//   try {
-//     await pool.query(
-//       `INSERT INTO admin_devices (email, expo_push_token)
-//        VALUES ($1, $2)
-//        ON CONFLICT (expo_push_token) DO UPDATE SET email = EXCLUDED.email`,
-//       [email, expoPushToken]
-//     );
-//     res.json({ success: true });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// });
-
 app.post("/api/admin/devices/register", async (req, res) => {
-  console.log("\n📱 ADMIN DEVICE REGISTRATION REQUEST\n");
-  
+  const { email, expoPushToken } = req.body;
   try {
-    const { email, password, expoPushToken, deviceInfo } = req.body;
-
-    console.log("📧 Email:", email);
-    console.log("📱 Token:", expoPushToken);
-
-    if (!email || !expoPushToken) {
-      return res.status(400).json({ 
-        error: "Email and expoPushToken are required" 
-      });
-    }
-
-    // Check credentials
-    const isValidAdmin = ADMIN_USERS.some(
-      admin => admin.email === email && admin.password === password
+    await pool.query(
+      `INSERT INTO admin_devices (email, expo_push_token)
+       VALUES ($1, $2)
+       ON CONFLICT (expo_push_token) DO UPDATE SET email = EXCLUDED.email`,
+      [email, expoPushToken]
     );
-
-    if (!isValidAdmin) {
-      console.error("❌ Invalid admin credentials");
-      return res.status(401).json({ 
-        error: "Invalid admin credentials" 
-      });
-    }
-
-    console.log("✅ Admin credentials verified");
-
-    if (!Expo.isExpoPushToken(expoPushToken)) {
-      console.error("❌ Invalid token format");
-      return res.status(400).json({ 
-        error: "Invalid Expo Push Token format" 
-      });
-    }
-
-    // ✅ FIXED: Remove device_info from query
-    const result = await pool.query(
-      `INSERT INTO admin_devices (email, expo_push_token, updated_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (expo_push_token) 
-       DO UPDATE SET 
-         email = EXCLUDED.email,
-         updated_at = NOW()
-       RETURNING *`,
-      [email, expoPushToken] // Removed device_info parameter
-    );
-
-    console.log("✅ Device registered:", result.rows[0]);
-
-    res.json({ 
-      success: true, 
-      message: "Device registered successfully",
-      device: result.rows[0]
-    });
-  } catch (error) {
-    console.error("❌ Registration error:", error);
-    res.status(500).json({ 
-      error: "Registration failed",
-      message: error.message 
-    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
-
 
 /* =========================
    ADMIN COMPLAINT DETAILS
