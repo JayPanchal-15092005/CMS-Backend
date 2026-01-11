@@ -273,7 +273,7 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     // Insert complaint
     const result = await pool.query(
       `INSERT INTO complaints (
-        clerk_id,
+        clerk_user_id,
         submitter_name,
         submitter_email,
         department,
