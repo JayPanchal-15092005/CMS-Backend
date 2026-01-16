@@ -11,9 +11,32 @@ dotenv.config();
 const app = express();
 const expo = new Expo();
 
+// async function initDatabase() {
+//   try {
+//     // Create admin_devices table
+//     await pool.query(`
+//       CREATE TABLE IF NOT EXISTS admin_devices (
+//         id SERIAL PRIMARY KEY,
+//         email VARCHAR(255) NOT NULL,
+//         expo_push_token VARCHAR(255) UNIQUE NOT NULL,
+//         device_info JSONB,
+//         created_at TIMESTAMP DEFAULT NOW(),
+//         updated_at TIMESTAMP DEFAULT NOW()
+//       );
+
+//       CREATE INDEX IF NOT EXISTS idx_admin_devices_email ON admin_devices(email);
+//       CREATE INDEX IF NOT EXISTS idx_admin_devices_token ON admin_devices(expo_push_token);
+//     `);
+
+//     console.log('✅ Admin devices table ready');
+//   } catch (error) {
+//     console.error('❌ Database init error:', error);
+//   }
+// }
+
 async function initDatabase() {
   try {
-    // Create admin_devices table
+    // 1. Create admin_devices table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS admin_devices (
         id SERIAL PRIMARY KEY,
@@ -23,16 +46,31 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
-
-      CREATE INDEX IF NOT EXISTS idx_admin_devices_email ON admin_devices(email);
-      CREATE INDEX IF NOT EXISTS idx_admin_devices_token ON admin_devices(expo_push_token);
     `);
 
-    console.log('✅ Admin devices table ready');
+    // 2. FIX: Create user_devices table for Employees
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_devices (
+        id SERIAL PRIMARY KEY,
+        clerk_user_id VARCHAR(255) NOT NULL,
+        expo_push_token VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_devices_clerk_id ON user_devices(clerk_user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_devices_token ON user_devices(expo_push_token);
+    `);
+
+    console.log('✅ All database tables ready');
   } catch (error) {
     console.error('❌ Database init error:', error);
   }
 }
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+})
+
+initDatabase();
 
 /* =========================
    MIDDLEWARE
@@ -46,10 +84,6 @@ app.use(clerkMiddleware());
 /* =========================
    DATABASE
 ========================= */
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
 
 pool
   .query("SELECT 1")
@@ -125,45 +159,24 @@ app.get("/health", (req, res) => {
 /* =========================
    EMPLOYEE: SUBMIT COMPLAINT
 ========================= */
+
 app.post("/api/complaints", requireAuth(), async (req, res) => {
   try {
     const clerkUserId = req.auth.userId;
-
     const {
-      submitter_name,
-      submitter_email,
-      department,
-      assets,
-      complain_detail,
-      complain_location,
-      to_whom,
-      priority,
+      submitter_name, submitter_email, department,
+      assets, complain_detail, complain_location,
+      to_whom, priority,
     } = req.body;
 
-    if (!department || !complain_detail) {
-      return res
-        .status(400)
-        .json({ error: "department and complain_detail required" });
-    }
-
     const result = await pool.query(
-      `
-      INSERT INTO complaints (
-        clerk_user_id,
-        submitter_name,
-        submitter_email,
-        department,
-        assets,
-        complain_detail,
-        complain_location,
-        to_whom,
-        priority,
-        status,
-        created_at
+      `INSERT INTO complaints (
+        clerk_user_id, submitter_name, submitter_email, department,
+        assets, complain_detail, complain_location, to_whom,
+        priority, status, created_at
       )
       VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,'Pending',NOW())
-      RETURNING *
-      `,
+      RETURNING *`,
       [
         clerkUserId,
         submitter_name?.trim() || "Anonymous",
@@ -179,28 +192,39 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 
     const complaint = result.rows[0];
 
+    // 🟢 FIX 2: Improved Admin Notification Logic
     (async () => {
-  try {
-    const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
-    
-    const adminMessages = adminDevices.rows.map(admin => ({
-      to: admin.expo_push_token,
-      sound: "default",
-      title: "🚨 New Complaint Received",
-      body: `New ${complaint.priority} priority task for ${complaint.department}.`,
-      data: { complaintId: complaint.id, screen: "admin-details" },
-    }));
+      try {
+        const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
+        
+        // Filter out invalid tokens to prevent batch errors
+        const messages = adminDevices.rows
+          .filter(admin => Expo.isExpoPushToken(admin.expo_push_token))
+          .map(admin => ({
+            to: admin.expo_push_token,
+            sound: "default",
+            title: "🚨 New Complaint Received",
+            body: `New ${complaint.priority} priority task for ${complaint.department}.`,
+            data: { 
+              complaintId: complaint.id, 
+              screen: "admin-details" // Ensure this matches your admin app route
+            },
+          }));
 
-    if (adminMessages.length > 0) {
-      await expo.sendPushNotificationsAsync(adminMessages);
-      console.log("🔔 Admins notified of new complaint");
-    }
-  } catch (err) {
-    console.error("❌ Admin notification failed:", err);
-  }
-})();
+        if (messages.length > 0) {
+          // Use chunking for reliability
+          const chunks = expo.chunkPushNotifications(messages);
+          for (let chunk of chunks) {
+            await expo.sendPushNotificationsAsync(chunk);
+          }
+          console.log(`🔔 ${messages.length} Admins notified`);
+        }
+      } catch (err) {
+        console.error("❌ Admin notification failed:", err);
+      }
+    })();
 
-    // WhatsApp (non-blocking)
+      // WhatsApp (non-blocking)
     if (
       process.env.TWILIO_ACCOUNT_SID &&
       process.env.TWILIO_WHATSAPP_FROM &&
@@ -232,17 +256,12 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
       })();
     }
 
-    res.status(201).json({
-      success: true,
-      id: complaint.id,
-      status: complaint.status,
-    });
+    res.status(201).json({ success: true, id: complaint.id });
   } catch (err) {
-    console.error("❌ Submit complaint error:", err);
+    console.error("❌ Submit error:", err);
     res.status(500).json({ error: "internal_server_error" });
   }
 });
-
 
 /* =========================
    EMPLOYEE: MY COMPLAINTS
