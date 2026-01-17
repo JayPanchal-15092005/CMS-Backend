@@ -67,7 +67,8 @@ async function initDatabase() {
 }
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  max: 1,
 })
 
 initDatabase();
@@ -193,7 +194,6 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     const complaint = result.rows[0];
 
     // 🟢 FIX 2: Improved Admin Notification Logic
-    (async () => {
       try {
         const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
         
@@ -212,17 +212,12 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
           }));
 
         if (messages.length > 0) {
-          // Use chunking for reliability
-          const chunks = expo.chunkPushNotifications(messages);
-          for (let chunk of chunks) {
-            await expo.sendPushNotificationsAsync(chunk);
-          }
-          console.log(`🔔 ${messages.length} Admins notified`);
+          await expo.sendPushNotificationsAsync(messages); // I need to await this if statement
         }
       } catch (err) {
-        console.error("❌ Admin notification failed:", err);
+        console.error("Notification failed but complaint saved:", err);
       }
-    })();
+    
 
       // WhatsApp (non-blocking)
     if (
