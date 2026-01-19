@@ -372,8 +372,8 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
           messages.push({
             to: device.expo_push_token,
             sound: "default",
-            title: "🚨 New Complaint",
-            body: `${priority || 'Medium'} priority - ${department}`,
+            title: "🚨 New Complaint Received",
+      body: `New ${complaint.priority} priority task for ${complaint.department}.`,
             data: { 
               complaintId: complaint.id,
               department: department,
