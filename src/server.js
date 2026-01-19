@@ -654,14 +654,10 @@ app.post("/api/admin/devices/register", async (req, res) => {
 ========================= */
 app.get("/api/admin/reports", adminAuth, async (req, res) => {
   try {
-    const { startDate, endDate } = req.query; // Format: YYYY-MM-DD
+    const { startDate, endDate } = req.query;
 
-    if (!startDate || !endDate) {
-      return res.status(400).json({ error: "Start and End dates are required" });
-    }
-
-    // 1. Fetch filtered complaints
-    const statsResult = await pool.query(
+    // 1. Summary Stats (Total, High Priority, Status counts)
+    const summary = await pool.query(
       `SELECT 
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE priority = 'High') as high_priority,
@@ -672,24 +668,26 @@ app.get("/api/admin/reports", adminAuth, async (req, res) => {
       [startDate, endDate]
     );
 
-    // 2. Find the department with the most complaints in this range
-    const deptResult = await pool.query(
-      `SELECT department, COUNT(*) as count 
+    // 2. ADVANCED: Full Department Breakdown
+    const deptStats = await pool.query(
+      `SELECT 
+        department, 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
+        COUNT(*) FILTER (WHERE priority = 'High') as high_priority
        FROM complaints 
        WHERE created_at::date BETWEEN $1 AND $2
-       GROUP BY department 
-       ORDER BY count DESC 
-       LIMIT 1`,
+       GROUP BY department
+       ORDER BY total DESC`,
       [startDate, endDate]
     );
 
     res.json({
-      summary: statsResult.rows[0],
-      topDepartment: deptResult.rows[0] || { department: 'N/A', count: 0 }
+      summary: summary.rows[0],
+      deptStats: deptStats.rows
     });
   } catch (err) {
-    console.error("❌ Report error:", err.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: err.message });
   }
 });
 
