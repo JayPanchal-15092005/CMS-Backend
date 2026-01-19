@@ -138,19 +138,188 @@ app.get("/health", (req, res) => {
    EMPLOYEE: SUBMIT COMPLAINT
 ========================= */
 
+// app.post("/api/complaints", requireAuth(), async (req, res) => {
+//   try {
+//     const clerkUserId = req.auth.userId;
+//     const {
+//       submitter_name,
+//       submitter_email,
+//       department,
+//       assets,
+//       complain_detail,
+//       complain_location,
+//       to_whom,
+//       priority,
+//     } = req.body;
+
+//     const result = await pool.query(
+//       `INSERT INTO complaints (
+//         clerk_user_id, submitter_name, submitter_email, department,
+//         assets, complain_detail, complain_location, to_whom,
+//         priority, status, created_at
+//       )
+//       VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,'Pending',NOW())
+//       RETURNING *`,
+//       [
+//         clerkUserId,
+//         submitter_name?.trim() || "Anonymous",
+//         submitter_email || null,
+//         department,
+//         JSON.stringify(assets || []),
+//         complain_detail,
+//         complain_location || null,
+//         to_whom || null,
+//         priority || "Medium",
+//       ],
+//     );
+
+//     const complaint = result.rows[0];
+//     console.log("✅ Complaint created:", complaint.id);
+
+//     // ✅ FIXED: Proper async notification sending with detailed logging
+//     (async () => {
+//       try {
+//         console.log("\n🔔 ===== SENDING PUSH NOTIFICATIONS =====");
+
+//         const adminDevices = await pool.query(
+//           "SELECT expo_push_token, email FROM admin_devices",
+//         );
+
+//         console.log(`📱 Found ${adminDevices.rows.length} admin device(s)`);
+
+//         if (adminDevices.rows.length === 0) {
+//           console.error("❌ NO ADMIN DEVICES REGISTERED!");
+//           console.error("   Make sure admin app was opened at least once");
+//           return;
+//         }
+
+//         // Log each device
+//         adminDevices.rows.forEach((device, i) => {
+//           console.log(`Device ${i + 1}:`, device.email, device.expo_push_token);
+//         });
+
+//         // Filter and validate tokens
+//         const validMessages = [];
+//         for (const device of adminDevices.rows) {
+//           if (!Expo.isExpoPushToken(device.expo_push_token)) {
+//             console.error(
+//               `❌ Invalid token for ${device.email}:`,
+//               device.expo_push_token,
+//             );
+//             continue;
+//           }
+
+//           validMessages.push({
+//             to: device.expo_push_token,
+//             sound: "default",
+//             // title: "🚨 New Complaint",
+//             // body: `${priority || "Medium"} priority - ${department}`,
+//              title: "🚨 New Complaint Received",
+//             body: `New ${complaint.priority} priority task for ${complaint.department}.`,
+//             data: {
+//               complaintId: complaint.id,
+//               department: department,
+//               priority: priority,
+//               screen: "admin-details",
+//             },
+//             priority: "high",
+//             channelId: "default",
+//           });
+//         }
+
+//         if (validMessages.length === 0) {
+//           console.error("❌ No valid tokens to send to!");
+//           return;
+//         }
+
+//         console.log(`📤 Sending ${validMessages.length} notification(s)...`);
+
+//         // Send notifications
+//         const chunks = expo.chunkPushNotifications(validMessages);
+//         const tickets = [];
+
+//         for (const chunk of chunks) {
+//           try {
+//             const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+//             tickets.push(...ticketChunk);
+//             console.log("✅ Chunk sent, tickets:", ticketChunk);
+//           } catch (error) {
+//             console.error("❌ Send chunk error:", error);
+//           }
+//         }
+
+//         // Check ticket results
+//         tickets.forEach((ticket, idx) => {
+//           if (ticket.status === "error") {
+//             console.error(`❌ Ticket ${idx} ERROR:`, ticket.message);
+//             if (ticket.details) {
+//               console.error("   Details:", ticket.details);
+//             }
+//           } else {
+//             console.log(`✅ Ticket ${idx} SUCCESS:`, ticket.id);
+//           }
+//         });
+
+//         console.log("🔔 ===== NOTIFICATIONS COMPLETE =====\n");
+//       } catch (err) {
+//         console.error("❌ ===== NOTIFICATION FAILED =====");
+//         console.error("Error:", err.message);
+//         console.error("Stack:", err.stack);
+//       }
+//     })();
+
+//     // WhatsApp (non-blocking)
+//     if (
+//       process.env.TWILIO_ACCOUNT_SID &&
+//       process.env.TWILIO_WHATSAPP_FROM &&
+//       process.env.MANAGER_WHATSAPP
+//     ) {
+//       (async () => {
+//         try {
+//           const message = `
+// 🆕 New Complaint
+// ID: ${complaint.id}
+// Name: ${submitter_name || "Anonymous"}
+// Email: ${submitter_email || "N/A"}
+// Department: ${department}
+// Priority: ${priority || "Medium"}
+// Location: ${complain_location || "N/A"}
+// Assigned: ${to_whom || "N/A"}
+
+// Details: ${complain_detail}
+//           `.trim();
+
+//           await twilioClient.messages.create({
+//             from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
+//             to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
+//             body: message,
+//           });
+//           console.log("✅ WhatsApp sent");
+//         } catch (e) {
+//           console.error("⚠️ WhatsApp failed:", e.message);
+//         }
+//       })();
+//     }
+
+//     res.status(201).json({ success: true, id: complaint.id });
+//   } catch (err) {
+//     console.error("❌ Submit error:", err);
+//     res.status(500).json({ error: "internal_server_error" });
+//   }
+// });
+
 app.post("/api/complaints", requireAuth(), async (req, res) => {
   try {
     const clerkUserId = req.auth.userId;
     const {
-      submitter_name,
-      submitter_email,
-      department,
-      assets,
-      complain_detail,
-      complain_location,
-      to_whom,
-      priority,
+      submitter_name, submitter_email, department,
+      assets, complain_detail, complain_location,
+      to_whom, priority,
     } = req.body;
+
+    console.log("\n📝 ===== NEW COMPLAINT SUBMISSION =====");
+    console.log("From:", submitter_name, submitter_email);
+    console.log("Department:", department);
 
     const result = await pool.query(
       `INSERT INTO complaints (
@@ -170,105 +339,90 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
         complain_location || null,
         to_whom || null,
         priority || "Medium",
-      ],
+      ]
     );
 
     const complaint = result.rows[0];
-    console.log("✅ Complaint created:", complaint.id);
+    console.log("✅ Complaint saved, ID:", complaint.id);
 
-    // ✅ FIXED: Proper async notification sending with detailed logging
-    (async () => {
-      try {
-        console.log("\n🔔 ===== SENDING PUSH NOTIFICATIONS =====");
-
-        const adminDevices = await pool.query(
-          "SELECT expo_push_token, email FROM admin_devices",
-        );
-
-        console.log(`📱 Found ${adminDevices.rows.length} admin device(s)`);
-
-        if (adminDevices.rows.length === 0) {
-          console.error("❌ NO ADMIN DEVICES REGISTERED!");
-          console.error("   Make sure admin app was opened at least once");
-          return;
-        }
-
-        // Log each device
-        adminDevices.rows.forEach((device, i) => {
-          console.log(`Device ${i + 1}:`, device.email, device.expo_push_token);
-        });
-
-        // Filter and validate tokens
-        const validMessages = [];
+    // ✅ CRITICAL: Send notification IMMEDIATELY (not in setImmediate)
+    try {
+      console.log("\n🔔 ===== SENDING PUSH NOTIFICATION NOW =====");
+      
+      const adminDevices = await pool.query(
+        "SELECT expo_push_token, email FROM admin_devices"
+      );
+      
+      console.log(`📱 Admin devices found: ${adminDevices.rows.length}`);
+      
+      if (adminDevices.rows.length === 0) {
+        console.error("❌ NO ADMIN DEVICES! App not registered.");
+        // Continue anyway - don't block response
+      } else {
+        // Validate and prepare messages
+        const messages = [];
         for (const device of adminDevices.rows) {
+          console.log(`Checking device: ${device.email} - ${device.expo_push_token}`);
+          
           if (!Expo.isExpoPushToken(device.expo_push_token)) {
-            console.error(
-              `❌ Invalid token for ${device.email}:`,
-              device.expo_push_token,
-            );
+            console.error(`❌ Invalid token for ${device.email}`);
             continue;
           }
 
-          validMessages.push({
+          messages.push({
             to: device.expo_push_token,
             sound: "default",
-            // title: "🚨 New Complaint",
-            // body: `${priority || "Medium"} priority - ${department}`,
-             title: "🚨 New Complaint Received",
-            body: `New ${complaint.priority} priority task for ${complaint.department}.`,
-            data: {
+            title: "🚨 New Complaint",
+            body: `${priority || 'Medium'} priority - ${department}`,
+            data: { 
               complaintId: complaint.id,
               department: department,
               priority: priority,
-              screen: "admin-details",
             },
             priority: "high",
             channelId: "default",
           });
         }
 
-        if (validMessages.length === 0) {
-          console.error("❌ No valid tokens to send to!");
-          return;
-        }
+        console.log(`📤 Sending ${messages.length} notification(s)...`);
 
-        console.log(`📤 Sending ${validMessages.length} notification(s)...`);
-
-        // Send notifications
-        const chunks = expo.chunkPushNotifications(validMessages);
-        const tickets = [];
-
-        for (const chunk of chunks) {
-          try {
-            const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-            tickets.push(...ticketChunk);
-            console.log("✅ Chunk sent, tickets:", ticketChunk);
-          } catch (error) {
-            console.error("❌ Send chunk error:", error);
+        if (messages.length > 0) {
+          // Send in chunks
+          const chunks = expo.chunkPushNotifications(messages);
+          
+          for (const chunk of chunks) {
+            const tickets = await expo.sendPushNotificationsAsync(chunk);
+            
+            console.log("📬 Tickets received:", tickets);
+            
+            // Check for errors
+            tickets.forEach((ticket, idx) => {
+              if (ticket.status === 'error') {
+                console.error(`❌ Ticket ${idx} ERROR:`, ticket.message);
+                if (ticket.details) {
+                  console.error("Details:", ticket.details);
+                }
+              } else {
+                console.log(`✅ Ticket ${idx} SUCCESS:`, ticket.id);
+              }
+            });
           }
+          
+          console.log("✅ Push notifications sent successfully!");
+        } else {
+          console.error("❌ No valid messages to send");
         }
-
-        // Check ticket results
-        tickets.forEach((ticket, idx) => {
-          if (ticket.status === "error") {
-            console.error(`❌ Ticket ${idx} ERROR:`, ticket.message);
-            if (ticket.details) {
-              console.error("   Details:", ticket.details);
-            }
-          } else {
-            console.log(`✅ Ticket ${idx} SUCCESS:`, ticket.id);
-          }
-        });
-
-        console.log("🔔 ===== NOTIFICATIONS COMPLETE =====\n");
-      } catch (err) {
-        console.error("❌ ===== NOTIFICATION FAILED =====");
-        console.error("Error:", err.message);
-        console.error("Stack:", err.stack);
       }
-    })();
+    } catch (notifError) {
+      console.error("❌ NOTIFICATION ERROR:");
+      console.error(notifError);
+      // Don't fail the request if notification fails
+    }
 
-    // WhatsApp (non-blocking)
+    console.log("📝 ===== COMPLAINT SUBMISSION COMPLETE =====\n");
+
+    // WhatsApp notification (non-blocking)
+     // WhatsApp (non-blocking)
     if (
       process.env.TWILIO_ACCOUNT_SID &&
       process.env.TWILIO_WHATSAPP_FROM &&
@@ -277,37 +431,35 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
       (async () => {
         try {
           const message = `
-🆕 New Complaint
-ID: ${complaint.id}
-Name: ${submitter_name || "Anonymous"}
-Email: ${submitter_email || "N/A"}
-Department: ${department}
-Priority: ${priority || "Medium"}
-Location: ${complain_location || "N/A"}
-Assigned: ${to_whom || "N/A"}
-
-Details: ${complain_detail}
-          `.trim();
+                🆕 New Complaint
+                ID: ${complaint.id}
+                Email: ${submitter_email || "N/A"}
+                Name: ${submitter_name || "Anonymous"}
+                Complaint: ${complain_detail}
+                Department: ${department}
+                Priority: ${priority || "Medium"}
+                Location: ${complain_location || "N/A"}
+                To whom: ${to_whom || "N/A"}          
+                `.trim();
+                
 
           await twilioClient.messages.create({
             from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
             to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
             body: message,
           });
-          console.log("✅ WhatsApp sent");
         } catch (e) {
           console.error("⚠️ WhatsApp failed:", e.message);
         }
       })();
     }
 
-    res.status(201).json({ success: true, id: complaint.id });
+    res.status(201).json({ success: true, id: complaint.id, status: complaint.status  });
   } catch (err) {
     console.error("❌ Submit error:", err);
     res.status(500).json({ error: "internal_server_error" });
   }
 });
-
 /* =========================
    EMPLOYEE: MY COMPLAINTS
 ========================= */
