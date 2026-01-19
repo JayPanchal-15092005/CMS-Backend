@@ -383,21 +383,6 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
   }
 });
 
-// app.post("/api/admin/devices/register", async (req, res) => {
-//   const { email, expoPushToken } = req.body;
-//   try {
-//     await pool.query(
-//       `INSERT INTO admin_devices (email, expo_push_token)
-//        VALUES ($1, $2)
-//        ON CONFLICT (expo_push_token) DO UPDATE SET email = EXCLUDED.email`,
-//       [email, expoPushToken]
-//     );
-//     res.json({ success: true });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// });
-
 app.post("/api/admin/devices/register", async (req, res) => {
   try {
     const { email, password, expoPushToken } = req.body;
