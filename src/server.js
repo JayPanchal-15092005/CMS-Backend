@@ -312,9 +312,14 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
   try {
     const clerkUserId = req.auth.userId;
     const {
-      submitter_name, submitter_email, department,
-      assets, complain_detail, complain_location,
-      to_whom, priority,
+      submitter_name,
+      submitter_email,
+      department,
+      assets,
+      complain_detail,
+      complain_location,
+      to_whom,
+      priority,
     } = req.body;
 
     console.log("\n📝 ===== NEW COMPLAINT SUBMISSION =====");
@@ -339,7 +344,7 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
         complain_location || null,
         to_whom || null,
         priority || "Medium",
-      ]
+      ],
     );
 
     const complaint = result.rows[0];
@@ -348,13 +353,13 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     // ✅ CRITICAL: Send notification IMMEDIATELY (not in setImmediate)
     try {
       console.log("\n🔔 ===== SENDING PUSH NOTIFICATION NOW =====");
-      
+
       const adminDevices = await pool.query(
-        "SELECT expo_push_token, email FROM admin_devices"
+        "SELECT expo_push_token, email FROM admin_devices",
       );
-      
+
       console.log(`📱 Admin devices found: ${adminDevices.rows.length}`);
-      
+
       if (adminDevices.rows.length === 0) {
         console.error("❌ NO ADMIN DEVICES! App not registered.");
         // Continue anyway - don't block response
@@ -362,8 +367,10 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
         // Validate and prepare messages
         const messages = [];
         for (const device of adminDevices.rows) {
-          console.log(`Checking device: ${device.email} - ${device.expo_push_token}`);
-          
+          console.log(
+            `Checking device: ${device.email} - ${device.expo_push_token}`,
+          );
+
           if (!Expo.isExpoPushToken(device.expo_push_token)) {
             console.error(`❌ Invalid token for ${device.email}`);
             continue;
@@ -373,8 +380,8 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
             to: device.expo_push_token,
             sound: "default",
             title: "🚨 New Complaint Received",
-      body: `New ${complaint.priority} priority task for ${complaint.department}.`,
-            data: { 
+            body: `New ${complaint.priority} priority task for ${complaint.department}.`,
+            data: {
               complaintId: complaint.id,
               department: department,
               priority: priority,
@@ -389,15 +396,15 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
         if (messages.length > 0) {
           // Send in chunks
           const chunks = expo.chunkPushNotifications(messages);
-          
+
           for (const chunk of chunks) {
             const tickets = await expo.sendPushNotificationsAsync(chunk);
-            
+
             console.log("📬 Tickets received:", tickets);
-            
+
             // Check for errors
             tickets.forEach((ticket, idx) => {
-              if (ticket.status === 'error') {
+              if (ticket.status === "error") {
                 console.error(`❌ Ticket ${idx} ERROR:`, ticket.message);
                 if (ticket.details) {
                   console.error("Details:", ticket.details);
@@ -407,7 +414,7 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
               }
             });
           }
-          
+
           console.log("✅ Push notifications sent successfully!");
         } else {
           console.error("❌ No valid messages to send");
@@ -422,7 +429,7 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     console.log("📝 ===== COMPLAINT SUBMISSION COMPLETE =====\n");
 
     // WhatsApp notification (non-blocking)
-     // WhatsApp (non-blocking)
+    // WhatsApp (non-blocking)
     if (
       process.env.TWILIO_ACCOUNT_SID &&
       process.env.TWILIO_WHATSAPP_FROM &&
@@ -441,7 +448,6 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
                 Location: ${complain_location || "N/A"}
                 To whom: ${to_whom || "N/A"}          
                 `.trim();
-                
 
           await twilioClient.messages.create({
             from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
@@ -454,7 +460,9 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
       })();
     }
 
-    res.status(201).json({ success: true, id: complaint.id, status: complaint.status  });
+    res
+      .status(201)
+      .json({ success: true, id: complaint.id, status: complaint.status });
   } catch (err) {
     console.error("❌ Submit error:", err);
     res.status(500).json({ error: "internal_server_error" });
@@ -550,19 +558,79 @@ app.get("/api/admin/complaints", adminAuth, async (req, res) => {
 /* =========================
    ADMIN: RESOLVE COMPLAINT
 ========================= */
+// app.post("/api/complaints/:id/resolve", async (req, res) => {
+//   try {
+//     const complaintId = req.params.id;
+//     const { remarks } = req.body;
+
+//     // 1️⃣ Update complaint
+//     const result = await pool.query(
+//       `
+//       UPDATE complaints
+//       SET status = 'Resolved'
+//       WHERE id = $1
+//       RETURNING clerk_user_id
+//       `,
+//       [complaintId],
+//     );
+
+//     if (!result.rows.length) {
+//       return res.status(404).json({ error: "Complaint not found" });
+//     }
+
+//     const clerkUserId = result.rows[0].clerk_user_id;
+
+//     // 2️⃣ Fetch employee devices
+//     const devices = await pool.query(
+//       `SELECT expo_push_token FROM user_devices WHERE clerk_user_id = $1`,
+//       [clerkUserId],
+//     );
+
+//     if (devices.rows.length === 0) {
+//       console.warn("⚠️ No device registered for clerk_user_id:", clerkUserId);
+//     }
+
+//     console.log("📲 Sending to tokens:", devices.rows);
+
+//     // 3️⃣ Prepare notifications
+//     const messages = devices.rows.map((d) => ({
+//       to: d.expo_push_token,
+//       sound: "default",
+//       title: "Complaint Resolved ✅",
+//       body: "Your complaint has been resolved. Tap to view details.",
+//       data: {
+//         screen: "complaint-details",
+//         complaintId,
+//       },
+//     }));
+
+//     // 4️⃣ Send notifications
+//     if (messages.length > 0) {
+//       await expo.sendPushNotificationsAsync(messages);
+//     }
+
+//     res.json({ success: true });
+//   } catch (err) {
+//     console.error("❌ Resolve error:", err);
+//     res.status(500).json({ error: "internal_server_error" });
+//   }
+// });  // Do not remove this source code because there is the logic of the Employee app Notification.
+
 app.post("/api/complaints/:id/resolve", async (req, res) => {
   try {
     const complaintId = req.params.id;
+    const { remarks } = req.body; // 🟢 Captured from the frontend TextInput
 
-    // 1️⃣ Update complaint
+    // 1️⃣ Update complaint with status and remarks
     const result = await pool.query(
       `
       UPDATE complaints
-      SET status = 'Resolved'
-      WHERE id = $1
+      SET status = 'Resolved',
+          admin_remarks = $1 -- 🟢 NEW: Save the remarks here
+      WHERE id = $2
       RETURNING clerk_user_id
       `,
-      [complaintId],
+      [remarks || null, complaintId], // Use null if no remarks provided
     );
 
     if (!result.rows.length) {
@@ -581,14 +649,12 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       console.warn("⚠️ No device registered for clerk_user_id:", clerkUserId);
     }
 
-    console.log("📲 Sending to tokens:", devices.rows);
-
     // 3️⃣ Prepare notifications
     const messages = devices.rows.map((d) => ({
       to: d.expo_push_token,
       sound: "default",
       title: "Complaint Resolved ✅",
-      body: "Your complaint has been resolved. Tap to view details.",
+      body: remarks ? `Resolved: ${remarks}` : "Your complaint has been resolved.", // 🟢 Optional: Include remarks in notification
       data: {
         screen: "complaint-details",
         complaintId,
@@ -600,7 +666,7 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       await expo.sendPushNotificationsAsync(messages);
     }
 
-    res.json({ success: true });
+    res.json({ success: true, message: "Complaint resolved with remarks" });
   } catch (err) {
     console.error("❌ Resolve error:", err);
     res.status(500).json({ error: "internal_server_error" });
@@ -659,13 +725,15 @@ app.get("/api/admin/reports", adminAuth, async (req, res) => {
     // 1. Summary Stats (Total, High Priority, Status counts)
     const summary = await pool.query(
       `SELECT 
-        COUNT(*) as total,
-        COUNT(*) FILTER (WHERE priority = 'High') as high_priority,
-        COUNT(*) FILTER (WHERE status = 'Pending') as pending,
-        COUNT(*) FILTER (WHERE status = 'Resolved') as resolved
-       FROM complaints 
-       WHERE created_at::date BETWEEN $1 AND $2`,
-      [startDate, endDate]
+  COUNT(*) as total,
+  COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
+  COUNT(*) FILTER (WHERE status = 'Pending') as pending,
+  COUNT(*) FILTER (WHERE priority = 'High') as high_priority,
+  COUNT(*) FILTER (WHERE priority = 'Medium') as medium_priority,
+  COUNT(*) FILTER (WHERE priority = 'Low') as low_priority
+FROM complaints 
+WHERE created_at::date BETWEEN $1 AND $2`,
+      [startDate, endDate],
     );
 
     // 2. ADVANCED: Full Department Breakdown
@@ -679,18 +747,17 @@ app.get("/api/admin/reports", adminAuth, async (req, res) => {
        WHERE created_at::date BETWEEN $1 AND $2
        GROUP BY department
        ORDER BY total DESC`,
-      [startDate, endDate]
+      [startDate, endDate],
     );
 
     res.json({
       summary: summary.rows[0],
-      deptStats: deptStats.rows
+      deptStats: deptStats.rows,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 /* =========================
    ADMIN COMPLAINT DETAILS
