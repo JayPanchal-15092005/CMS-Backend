@@ -11,7 +11,6 @@ dotenv.config();
 const app = express();
 const expo = new Expo();
 
-
 async function initDatabase() {
   try {
     // 1. Create admin_devices table
@@ -38,16 +37,16 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_user_devices_token ON user_devices(expo_push_token);
     `);
 
-    console.log('✅ All database tables ready');
+    console.log("✅ All database tables ready");
   } catch (error) {
-    console.error('❌ Database init error:', error);
+    console.error("❌ Database init error:", error);
   }
 }
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: 1,
-})
+});
 
 initDatabase();
 
@@ -93,7 +92,7 @@ const adminAuth = (req, res, next) => {
   }
 
   const isValidAdmin = ADMIN_USERS.some(
-    (admin) => admin.email === email.trim() && admin.password === password
+    (admin) => admin.email === email.trim() && admin.password === password,
   );
 
   if (!isValidAdmin) {
@@ -108,7 +107,7 @@ const adminAuth = (req, res, next) => {
 ========================= */
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
+  process.env.TWILIO_AUTH_TOKEN,
 );
 
 /* =========================
@@ -143,9 +142,14 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
   try {
     const clerkUserId = req.auth.userId;
     const {
-      submitter_name, submitter_email, department,
-      assets, complain_detail, complain_location,
-      to_whom, priority,
+      submitter_name,
+      submitter_email,
+      department,
+      assets,
+      complain_detail,
+      complain_location,
+      to_whom,
+      priority,
     } = req.body;
 
     const result = await pool.query(
@@ -166,38 +170,103 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
         complain_location || null,
         to_whom || null,
         priority || "Medium",
-      ]
+      ],
     );
 
     const complaint = result.rows[0];
+    console.log("✅ Complaint created:", complaint.id);
 
-    // 🟢 FIX 2: Improved Admin Notification Logic
+    // ✅ FIXED: Proper async notification sending with detailed logging
+    (async () => {
       try {
-        const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
-        
-        // Filter out invalid tokens to prevent batch errors
-        const messages = adminDevices.rows
-          .filter(admin => Expo.isExpoPushToken(admin.expo_push_token))
-          .map(admin => ({
-            to: admin.expo_push_token,
-            sound: "default",
-            title: "🚨 New Complaint Received",
-            body: `New ${complaint.priority} priority task for ${complaint.department}.`,
-            data: { 
-              complaintId: complaint.id, 
-              screen: "admin-details" // Ensure this matches your admin app route
-            },
-          }));
+        console.log("\n🔔 ===== SENDING PUSH NOTIFICATIONS =====");
 
-        if (messages.length > 0) {
-          await expo.sendPushNotificationsAsync(messages); // I need to await this if statement
+        const adminDevices = await pool.query(
+          "SELECT expo_push_token, email FROM admin_devices",
+        );
+
+        console.log(`📱 Found ${adminDevices.rows.length} admin device(s)`);
+
+        if (adminDevices.rows.length === 0) {
+          console.error("❌ NO ADMIN DEVICES REGISTERED!");
+          console.error("   Make sure admin app was opened at least once");
+          return;
         }
-      } catch (err) {
-        console.error("❌ Push failed:", err.message);
-      }
-    
 
-      // WhatsApp (non-blocking)
+        // Log each device
+        adminDevices.rows.forEach((device, i) => {
+          console.log(`Device ${i + 1}:`, device.email, device.expo_push_token);
+        });
+
+        // Filter and validate tokens
+        const validMessages = [];
+        for (const device of adminDevices.rows) {
+          if (!Expo.isExpoPushToken(device.expo_push_token)) {
+            console.error(
+              `❌ Invalid token for ${device.email}:`,
+              device.expo_push_token,
+            );
+            continue;
+          }
+
+          validMessages.push({
+            to: device.expo_push_token,
+            sound: "default",
+            title: "🚨 New Complaint",
+            body: `${priority || "Medium"} priority - ${department}`,
+            data: {
+              complaintId: complaint.id,
+              department: department,
+              priority: priority,
+              screen: "admin-details",
+            },
+            priority: "high",
+            channelId: "default",
+          });
+        }
+
+        if (validMessages.length === 0) {
+          console.error("❌ No valid tokens to send to!");
+          return;
+        }
+
+        console.log(`📤 Sending ${validMessages.length} notification(s)...`);
+
+        // Send notifications
+        const chunks = expo.chunkPushNotifications(validMessages);
+        const tickets = [];
+
+        for (const chunk of chunks) {
+          try {
+            const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+            tickets.push(...ticketChunk);
+            console.log("✅ Chunk sent, tickets:", ticketChunk);
+          } catch (error) {
+            console.error("❌ Send chunk error:", error);
+          }
+        }
+
+        // Check ticket results
+        tickets.forEach((ticket, idx) => {
+          if (ticket.status === "error") {
+            console.error(`❌ Ticket ${idx} ERROR:`, ticket.message);
+            if (ticket.details) {
+              console.error("   Details:", ticket.details);
+            }
+          } else {
+            console.log(`✅ Ticket ${idx} SUCCESS:`, ticket.id);
+          }
+        });
+
+        console.log("🔔 ===== NOTIFICATIONS COMPLETE =====\n");
+      } catch (err) {
+        console.error("❌ ===== NOTIFICATION FAILED =====");
+        console.error("Error:", err.message);
+        console.error("Stack:", err.stack);
+      }
+    })();
+
+    // WhatsApp (non-blocking)
     if (
       process.env.TWILIO_ACCOUNT_SID &&
       process.env.TWILIO_WHATSAPP_FROM &&
@@ -206,23 +275,24 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
       (async () => {
         try {
           const message = `
-                🆕 New Complaint
-                ID: ${complaint.id}
-                Email: ${submitter_email || "N/A"}
-                Name: ${submitter_name || "Anonymous"}
-                Complaint: ${complain_detail}
-                Department: ${department}
-                Priority: ${priority || "Medium"}
-                Location: ${complain_location || "N/A"}
-                To whom: ${to_whom || "N/A"}          
-                `.trim();
-                
+🆕 New Complaint
+ID: ${complaint.id}
+Name: ${submitter_name || "Anonymous"}
+Email: ${submitter_email || "N/A"}
+Department: ${department}
+Priority: ${priority || "Medium"}
+Location: ${complain_location || "N/A"}
+Assigned: ${to_whom || "N/A"}
+
+Details: ${complain_detail}
+          `.trim();
 
           await twilioClient.messages.create({
             from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
             to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
             body: message,
           });
+          console.log("✅ WhatsApp sent");
         } catch (e) {
           console.error("⚠️ WhatsApp failed:", e.message);
         }
@@ -249,7 +319,7 @@ app.get("/api/employee/complaints", requireAuth(), async (req, res) => {
     WHERE clerk_user_id = $1
     ORDER BY created_at DESC
     `,
-    [clerkUserId]
+    [clerkUserId],
   );
 
   res.json({ complaints: result.rows });
@@ -268,7 +338,7 @@ app.get("/api/employee/complaints/:id", requireAuth(), async (req, res) => {
       FROM complaints
       WHERE id = $1 AND clerk_user_id = $2
       `,
-    [complaintId, clerkUserId]
+    [complaintId, clerkUserId],
   );
 
   if (!result.rows.length) {
@@ -290,7 +360,7 @@ app.post("/api/devices/register", requireAuth(), async (req, res) => {
       return res.status(400).json({ error: "Missing data" });
     }
 
-    // 🟢 ON CONFLICT ensures that if the token is already in the DB, 
+    // 🟢 ON CONFLICT ensures that if the token is already in the DB,
     // it just updates the user_id instead of failing.
     await pool.query(
       `
@@ -299,7 +369,7 @@ app.post("/api/devices/register", requireAuth(), async (req, res) => {
       ON CONFLICT (expo_push_token) 
       DO UPDATE SET clerk_user_id = EXCLUDED.clerk_user_id, created_at = NOW()
       `,
-      [clerkUserId, expoPushToken]
+      [clerkUserId, expoPushToken],
     );
 
     res.json({ success: true });
@@ -317,7 +387,7 @@ app.get("/api/admin/complaints", adminAuth, async (req, res) => {
       SELECT id, department, complain_detail, status, created_at
     FROM complaints
     ORDER BY created_at DESC
-    `
+    `,
   );
 
   res.json({ complaints: result.rows });
@@ -338,7 +408,7 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       WHERE id = $1
       RETURNING clerk_user_id
       `,
-      [complaintId]
+      [complaintId],
     );
 
     if (!result.rows.length) {
@@ -350,7 +420,7 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
     // 2️⃣ Fetch employee devices
     const devices = await pool.query(
       `SELECT expo_push_token FROM user_devices WHERE clerk_user_id = $1`,
-      [clerkUserId]
+      [clerkUserId],
     );
 
     if (devices.rows.length === 0) {
@@ -394,7 +464,7 @@ app.post("/api/admin/devices/register", async (req, res) => {
 
     // 2. Check credentials (from your hardcoded list)
     const isValidAdmin = ADMIN_USERS.some(
-      admin => admin.email === email && admin.password === password
+      (admin) => admin.email === email && admin.password === password,
     );
 
     if (!isValidAdmin) {
@@ -408,14 +478,16 @@ app.post("/api/admin/devices/register", async (req, res) => {
        ON CONFLICT (expo_push_token) 
        DO UPDATE SET email = EXCLUDED.email, updated_at = NOW()
        RETURNING *`,
-      [email, expoPushToken]
+      [email, expoPushToken],
     );
 
     res.json({ success: true, device: result.rows[0] });
   } catch (error) {
     console.error("❌ Registration error:", error.message);
     // Send the error message back to see it in Vercel logs
-    res.status(500).json({ error: "Database registration failed", details: error.message });
+    res
+      .status(500)
+      .json({ error: "Database registration failed", details: error.message });
   }
 });
 
@@ -442,7 +514,7 @@ app.get("/api/admin/complaints/:id", async (req, res) => {
       FROM complaints
       WHERE id = $1
       `,
-      [id]
+      [id],
     );
 
     if (!result.rows.length) {
@@ -481,10 +553,10 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`📲 Twilio SID: ${process.env.TWILIO_ACCOUNT_SID ? "✅" : "❌"}`);
   console.log(`📲 Twilio Auth: ${process.env.TWILIO_AUTH_TOKEN ? "✅" : "❌"}`);
   console.log(
-    `📱 WhatsApp From: ${process.env.TWILIO_WHATSAPP_FROM || "❌ Not set"}`
+    `📱 WhatsApp From: ${process.env.TWILIO_WHATSAPP_FROM || "❌ Not set"}`,
   );
   console.log(
-    `📱 Manager WhatsApp: ${process.env.MANAGER_WHATSAPP || "❌ Not set"}`
+    `📱 Manager WhatsApp: ${process.env.MANAGER_WHATSAPP || "❌ Not set"}`,
   );
   console.log("🚀 ================================\n");
 });
