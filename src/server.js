@@ -11,28 +11,6 @@ dotenv.config();
 const app = express();
 const expo = new Expo();
 
-// async function initDatabase() {
-//   try {
-//     // Create admin_devices table
-//     await pool.query(`
-//       CREATE TABLE IF NOT EXISTS admin_devices (
-//         id SERIAL PRIMARY KEY,
-//         email VARCHAR(255) NOT NULL,
-//         expo_push_token VARCHAR(255) UNIQUE NOT NULL,
-//         device_info JSONB,
-//         created_at TIMESTAMP DEFAULT NOW(),
-//         updated_at TIMESTAMP DEFAULT NOW()
-//       );
-
-//       CREATE INDEX IF NOT EXISTS idx_admin_devices_email ON admin_devices(email);
-//       CREATE INDEX IF NOT EXISTS idx_admin_devices_token ON admin_devices(expo_push_token);
-//     `);
-
-//     console.log('✅ Admin devices table ready');
-//   } catch (error) {
-//     console.error('❌ Database init error:', error);
-//   }
-// }
 
 async function initDatabase() {
   try {
@@ -215,7 +193,7 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
           await expo.sendPushNotificationsAsync(messages); // I need to await this if statement
         }
       } catch (err) {
-        console.error("Notification failed but complaint saved:", err);
+        console.error("❌ Push failed:", err.message);
       }
     
 
@@ -405,18 +383,54 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
   }
 });
 
+// app.post("/api/admin/devices/register", async (req, res) => {
+//   const { email, expoPushToken } = req.body;
+//   try {
+//     await pool.query(
+//       `INSERT INTO admin_devices (email, expo_push_token)
+//        VALUES ($1, $2)
+//        ON CONFLICT (expo_push_token) DO UPDATE SET email = EXCLUDED.email`,
+//       [email, expoPushToken]
+//     );
+//     res.json({ success: true });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
 app.post("/api/admin/devices/register", async (req, res) => {
-  const { email, expoPushToken } = req.body;
   try {
-    await pool.query(
-      `INSERT INTO admin_devices (email, expo_push_token)
-       VALUES ($1, $2)
-       ON CONFLICT (expo_push_token) DO UPDATE SET email = EXCLUDED.email`,
+    const { email, password, expoPushToken } = req.body;
+
+    // 1. Validation
+    if (!email || !expoPushToken) {
+      return res.status(400).json({ error: "Missing email or token" });
+    }
+
+    // 2. Check credentials (from your hardcoded list)
+    const isValidAdmin = ADMIN_USERS.some(
+      admin => admin.email === email && admin.password === password
+    );
+
+    if (!isValidAdmin) {
+      return res.status(401).json({ error: "Unauthorized admin credentials" });
+    }
+
+    // 3. Database Operation with error handling
+    const result = await pool.query(
+      `INSERT INTO admin_devices (email, expo_push_token, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (expo_push_token) 
+       DO UPDATE SET email = EXCLUDED.email, updated_at = NOW()
+       RETURNING *`,
       [email, expoPushToken]
     );
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+
+    res.json({ success: true, device: result.rows[0] });
+  } catch (error) {
+    console.error("❌ Registration error:", error.message);
+    // Send the error message back to see it in Vercel logs
+    res.status(500).json({ error: "Database registration failed", details: error.message });
   }
 });
 
