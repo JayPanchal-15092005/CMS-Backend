@@ -623,17 +623,14 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
 
     // 1️⃣ Update complaint with status and remarks
     const result = await pool.query(
-      `
-      UPDATE complaints
-      SET status = 'Resolved',
-          admin_remarks = $1 -- 🟢 NEW: Save the remarks here
-      WHERE id = $2
-      RETURNING clerk_user_id
-      `,
-      [remarks || null, complaintId], // Use null if no remarks provided
+      `UPDATE complaints 
+       SET status = 'Resolved', admin_remarks = $1 
+       WHERE id = $2 
+       RETURNING clerk_user_id`,
+      [remarks || null, complaintId]
     );
 
-    if (!result.rows.length) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: "Complaint not found" });
     }
 
@@ -762,6 +759,40 @@ WHERE created_at::date BETWEEN $1 AND $2`,
 /* =========================
    ADMIN COMPLAINT DETAILS
 ========================= */
+// app.get("/api/admin/complaints/:id", async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const result = await pool.query(
+//       `
+//       SELECT
+//         id,
+//         department,
+//         complain_detail,
+//         complain_location,
+//         assets,
+//         priority,
+//         status,
+//         created_at,
+//         submitter_name,
+//          submitter_email
+//       FROM complaints
+//       WHERE id = $1
+//       `,
+//       [id],
+//     );
+
+//     if (!result.rows.length) {
+//       return res.status(404).json({ error: "Complaint not found" });
+//     }
+
+//     res.json({ complaint: result.rows[0] });
+//   } catch (err) {
+//     console.error("❌ Admin complaint details error:", err);
+//     res.status(500).json({ error: "internal_server_error" });
+//   }
+// });
+
 app.get("/api/admin/complaints/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -778,7 +809,8 @@ app.get("/api/admin/complaints/:id", async (req, res) => {
         status,
         created_at,
         submitter_name,
-         submitter_email
+        submitter_email,
+        admin_remarks -- 🟢 FIXED: Added this column to show saved remarks
       FROM complaints
       WHERE id = $1
       `,
