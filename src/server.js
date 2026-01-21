@@ -716,47 +716,87 @@ app.post("/api/admin/devices/register", async (req, res) => {
 /* =========================
    ADMIN: ANALYTICS REPORTS
 ========================= */
+// app.get("/api/admin/reports", adminAuth, async (req, res) => {
+//   try {
+//     const { startDate, endDate } = req.query;
+
+//     // 1. Summary Stats (Total, High Priority, Status counts)
+//     const summary = await pool.query(
+//       `SELECT 
+//   COUNT(*) as total,
+//   COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
+//   COUNT(*) FILTER (WHERE status = 'Pending') as pending,
+//   COUNT(*) FILTER (WHERE priority = 'High') as high_priority,
+//   COUNT(*) FILTER (WHERE priority = 'Medium') as medium_priority,
+//   COUNT(*) FILTER (WHERE priority = 'Low') as low_priority
+// FROM complaints 
+// WHERE created_at::date BETWEEN $1 AND $2`,
+//       [startDate, endDate],
+//     );
+
+//     // 2. ADVANCED: Full Department Breakdown
+//     const deptStats = await pool.query(
+//       `SELECT 
+//         department, 
+//         COUNT(*) as total,
+//         COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
+//         COUNT(*) FILTER (WHERE priority = 'High') as high_priority
+//        FROM complaints 
+//        WHERE created_at::date BETWEEN $1 AND $2
+//        GROUP BY department
+//        ORDER BY total DESC`,
+//       [startDate, endDate],
+//     );
+
+//     res.json({
+//       summary: summary.rows[0],
+//       deptStats: deptStats.rows,
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
 app.get("/api/admin/reports", adminAuth, async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, department } = req.query;
 
-    // 1. Summary Stats (Total, High Priority, Status counts)
+    let queryParams = [startDate, endDate];
+    let filterClause = "WHERE created_at::date BETWEEN $1 AND $2";
+
+    // 🟢 Add department filter if selected
+    if (department && department !== 'All') {
+      filterClause += " AND department = $3";
+      queryParams.push(department);
+    }
+
     const summary = await pool.query(
       `SELECT 
-  COUNT(*) as total,
-  COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
-  COUNT(*) FILTER (WHERE status = 'Pending') as pending,
-  COUNT(*) FILTER (WHERE priority = 'High') as high_priority,
-  COUNT(*) FILTER (WHERE priority = 'Medium') as medium_priority,
-  COUNT(*) FILTER (WHERE priority = 'Low') as low_priority
-FROM complaints 
-WHERE created_at::date BETWEEN $1 AND $2`,
-      [startDate, endDate],
-    );
-
-    // 2. ADVANCED: Full Department Breakdown
-    const deptStats = await pool.query(
-      `SELECT 
-        department, 
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
-        COUNT(*) FILTER (WHERE priority = 'High') as high_priority
-       FROM complaints 
-       WHERE created_at::date BETWEEN $1 AND $2
-       GROUP BY department
-       ORDER BY total DESC`,
-      [startDate, endDate],
+        COUNT(*) FILTER (WHERE status = 'Pending') as pending,
+        COUNT(*) FILTER (WHERE priority = 'High') as high_priority,
+        COUNT(*) FILTER (WHERE priority = 'Medium') as medium_priority,
+        COUNT(*) FILTER (WHERE priority = 'Low') as low_priority
+       FROM complaints ${filterClause}`,
+      queryParams
+    );
+
+    const deptStats = await pool.query(
+      `SELECT department, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'Resolved') as resolved
+       FROM complaints ${filterClause}
+       GROUP BY department ORDER BY total DESC`,
+      queryParams
     );
 
     res.json({
       summary: summary.rows[0],
-      deptStats: deptStats.rows,
+      deptStats: deptStats.rows
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 /* =========================
    ADMIN COMPLAINT DETAILS
 ========================= */
