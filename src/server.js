@@ -105,10 +105,10 @@ const adminAuth = (req, res, next) => {
 /* =========================
    TWILIO SETUP
 ========================= */
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN,
-);
+// const twilioClient = twilio(
+//   process.env.TWILIO_ACCOUNT_SID,
+//   process.env.TWILIO_AUTH_TOKEN,
+// );
 
 /* =========================
    SIMPLE ADMIN AUTH (NO CLERK)
@@ -430,61 +430,77 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 
     // WhatsApp notification (non-blocking)
     // WhatsApp (non-blocking)
-    if (
-      process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_AUTH_TOKEN && // Ensure Auth Token is checked too
-      process.env.TWILIO_WHATSAPP_FROM &&
-      process.env.MANAGER_WHATSAPP
-    ) {
-      // (async () => {
-      //   try {
-      //     const message = `
-      //           🆕 New Complaint
-      //           ID: ${complaint.id}
-      //           Email: ${submitter_email || "N/A"}
-      //           Name: ${submitter_name || "Anonymous"}
-      //           Complaint: ${complain_detail}
-      //           Department: ${department}
-      //           Priority: ${priority || "Medium"}
-      //           Location: ${complain_location || "N/A"}
-      //           To whom: ${to_whom || "N/A"}          
-      //           `.trim();
+//     if (
+//       process.env.TWILIO_ACCOUNT_SID &&
+//       process.env.TWILIO_AUTH_TOKEN && // Ensure Auth Token is checked too
+//       process.env.TWILIO_WHATSAPP_FROM &&
+//       process.env.MANAGER_WHATSAPP
+//     ) {
+//       try {
+//         const messageBody = `
+// 🆕 *New Complaint Received*
+// *ID:* ${complaint.id}
+// *Name:* ${submitter_name || "Anonymous"}
+// *Dept:* ${department}
+// *Priority:* ${priority || "Medium"}
+// *Issue:* ${complain_detail}
+// *Location:* ${complain_location || "N/A"}
+//     `.trim();
 
-      //     await twilioClient.messages.create({
-      //       from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
-      //       to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
-      //       body: message,
-      //     });
-      //   } catch (e) {
-      //     console.error("⚠️ WhatsApp failed:", e.message);
-      //   }
-      // })();
-      try {
-        const messageBody = `
+//     // 🟢 CRITICAL: Use await here so Vercel doesn't kill the process
+//     const twilioResponse = await twilioClient.messages.create({
+//       from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
+//       to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
+//       body: messageBody,
+//     });
+
+//     console.log("✅ WhatsApp sent via Twilio. SID:", twilioResponse.sid);
+//       } catch (error) {
+//         console.error("❌ Twilio WhatsApp Error:", error.message);  
+//         // Log the full error to Vercel logs to see if it's a Twilio config issue
+//     console.error("Twilio Details:", error);
+//       }
+
+//     }
+
+      /* =========================
+   WATI.IO WHATSAPP NOTIFICATION
+========================= */
+if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.env.MANAGER_WHATSAPP) {
+  try {
+    const messageText = `
 🆕 *New Complaint Received*
 *ID:* ${complaint.id}
 *Name:* ${submitter_name || "Anonymous"}
 *Dept:* ${department}
 *Priority:* ${priority || "Medium"}
 *Issue:* ${complain_detail}
-*Location:* ${complain_location || "N/A"}
     `.trim();
 
-    // 🟢 CRITICAL: Use await here so Vercel doesn't kill the process
-    const twilioResponse = await twilioClient.messages.create({
-      from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
-      to: `whatsapp:${process.env.MANAGER_WHATSAPP}`,
-      body: messageBody,
-    });
-
-    console.log("✅ WhatsApp sent via Twilio. SID:", twilioResponse.sid);
-      } catch (error) {
-        console.error("❌ Twilio WhatsApp Error:", error.message);  
-        // Log the full error to Vercel logs to see if it's a Twilio config issue
-    console.error("Twilio Details:", error);
+    // 🟢 CRITICAL: Use await for Vercel serverless environment
+    const watiResponse = await fetch(
+      `${process.env.WATI_API_ENDPOINT}/api/v1/sendSessionMessage/${process.env.MANAGER_WHATSAPP}`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.WATI_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messageText: messageText }),
       }
+    );
 
+    const watiData = await watiResponse.json();
+    
+    if (watiResponse.ok) {
+      console.log("✅ Wati WhatsApp notification sent successfully");
+    } else {
+      console.error("❌ Wati API Error:", watiData.message || watiData);
     }
+  } catch (e) {
+    console.error("❌ Wati Integration Failed:", e.message);
+  }
+}
 
     res
       .status(201)
