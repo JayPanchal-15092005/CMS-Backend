@@ -466,6 +466,9 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
       /* =========================
    WATI.IO WHATSAPP NOTIFICATION
 ========================= */
+/* =========================
+   FIXED WATI.IO INTEGRATION
+========================= */
 if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.env.MANAGER_WHATSAPP) {
   try {
     const messageText = `
@@ -473,11 +476,9 @@ if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.en
 *ID:* ${complaint.id}
 *Name:* ${submitter_name || "Anonymous"}
 *Dept:* ${department}
-*Priority:* ${priority || "Medium"}
 *Issue:* ${complain_detail}
     `.trim();
 
-    // 🟢 CRITICAL: Use await for Vercel serverless environment
     const watiResponse = await fetch(
       `${process.env.WATI_API_ENDPOINT}/api/v1/sendSessionMessage/${process.env.MANAGER_WHATSAPP}`,
       {
@@ -490,12 +491,23 @@ if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.en
       }
     );
 
-    const watiData = await watiResponse.json();
+    // 🟢 FIX: Get response as text first to avoid the "Unexpected end" error
+    const responseText = await watiResponse.text();
     
-    if (watiResponse.ok) {
-      console.log("✅ Wati WhatsApp notification sent successfully");
+    if (responseText) {
+      const watiData = JSON.parse(responseText); // Parse only if not empty
+      if (watiResponse.ok) {
+        console.log("✅ Wati notification sent:", watiData);
+      } else {
+        console.error("❌ Wati API returned error:", watiData);
+      }
     } else {
-      console.error("❌ Wati API Error:", watiData.message || watiData);
+      // If response is empty but status is OK, it still worked!
+      if (watiResponse.ok) {
+        console.log("✅ Wati notification sent (Empty Success Response)");
+      } else {
+        console.error(`❌ Wati failed with status ${watiResponse.status} and no message body.`);
+      }
     }
   } catch (e) {
     console.error("❌ Wati Integration Failed:", e.message);
