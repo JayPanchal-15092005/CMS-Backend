@@ -472,9 +472,12 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 /* =========================
    FIXED WATI.IO INTEGRATION
 ========================= */
+/* =========================
+   FIXED WATI.IO INTEGRATION
+========================= */
 if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.env.MANAGER_WHATSAPP) {
   try {
-    // 1. Explicitly build the message content
+    // 1. Build the complaint details string explicitly
     const complaintInfo = `
 🆕 *New Complaint Received*
 *ID:* ${complaint.id}
@@ -483,35 +486,35 @@ if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.en
 *Issue:* ${complaint.complain_detail}
     `.trim();
 
-    // 2. Safety check: ensure the message isn't empty
+    // 2. Safety Check: Verify text is not empty before calling API
     if (!complaintInfo) {
-      throw new Error("Complaint information is empty, skipping WhatsApp.");
+      console.error("❌ Complaint details were empty. Skipping Wati.");
+      return;
     }
 
-    console.log("📡 Sending to Wati for phone:", process.env.MANAGER_WHATSAPP);
-
+    // 3. Send the request
     const watiResponse = await fetch(
       `${process.env.WATI_API_ENDPOINT}/api/v1/sendSessionMessage/${process.env.MANAGER_WHATSAPP}`,
       {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${process.env.WATI_ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json", // Critical for parsing
         },
-        // 🟢 Ensure the key is exactly 'messageText'
+        // 🟢 Ensure the key name is exactly 'messageText'
         body: JSON.stringify({ messageText: complaintInfo }),
       }
     );
 
-    const responseText = await watiResponse.text();
+    const responseText = await watiResponse.text(); // Read as text first to avoid crashes
     
     if (responseText) {
       const watiData = JSON.parse(responseText);
-      // Wati returns success: true or result: 'success' depending on the version
-      if (watiData.result === 'success' || watiData.ok || watiData.result === true) {
+      // Wati returns 'success' or true depending on account type
+      if (watiData.result === 'success' || watiData.ok === true || watiData.result === true) {
         console.log("✅ Wati WhatsApp notification sent successfully!");
       } else {
-        console.error("❌ Wati API rejected message:", watiData.info || watiData.message || watiData);
+        console.error("❌ Wati API Error:", watiData.info || watiData.message);
       }
     }
   } catch (e) {
