@@ -471,7 +471,8 @@ if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
     // 🟢 Build the dynamic message content
     const complaintText = `
 🆕 *New Complaint Received*
-*ID:* ${complaint.id}
+*Name*: ${submitter_name}
+*Email*: ${submitter_email}
 *Dept:* ${department}
 *Priority:* ${priority || "Medium"}
 *Issue:* ${complain_detail}

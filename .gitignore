@@ -23,3 +23,5 @@ src/config/*.json
 folderico-azure.ico
 desktop.ini
 src/test-notify.js
+src/test-notify.js
+src/test-notify.js
