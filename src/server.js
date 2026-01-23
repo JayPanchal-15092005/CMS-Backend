@@ -463,62 +463,53 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 
 //     }
 
-      /* =========================
-   WATI.IO WHATSAPP NOTIFICATION
-========================= */
 /* =========================
-   FIXED WATI.IO INTEGRATION
+   FINAL GUPSHUP INTEGRATION
 ========================= */
-/* =========================
-   FIXED WATI.IO INTEGRATION
-========================= */
-/* =========================
-   FIXED WATI.IO INTEGRATION
-========================= */
-if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.env.MANAGER_WHATSAPP) {
+if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
   try {
-    // 1. Build the complaint details string explicitly
-    const complaintInfo = `
+    // 🟢 Build the dynamic message content
+    const complaintText = `
 🆕 *New Complaint Received*
 *ID:* ${complaint.id}
-*Dept:* ${complaint.department}
-*Priority:* ${complaint.priority || "Medium"}
-*Issue:* ${complaint.complain_detail}
+*Dept:* ${department}
+*Priority:* ${priority || "Medium"}
+*Issue:* ${complain_detail}
+*Location:* ${complain_location || "N/A"}
     `.trim();
 
-    // 2. Safety Check: Verify text is not empty before calling API
-    if (!complaintInfo) {
-      console.error("❌ Complaint details were empty. Skipping Wati.");
-      return;
-    }
+    const messagePayload = {
+      type: "text",
+      text: complaintText
+    };
 
-    // 3. Send the request
-    const watiResponse = await fetch(
-      `${process.env.WATI_API_ENDPOINT}/api/v1/sendSessionMessage/${process.env.MANAGER_WHATSAPP}`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.WATI_ACCESS_TOKEN}`,
-          "Content-Type": "application/json", // Critical for parsing
-        },
-        // 🟢 Ensure the key name is exactly 'messageText'
-        body: JSON.stringify({ messageText: complaintInfo }),
-      }
-    );
+    // 🟢 Set up the URL-encoded parameters
+    const params = new URLSearchParams();
+    params.append("channel", "whatsapp");
+    params.append("source", "917834811114"); // Gupshup Sandbox Number
+    params.append("destination", process.env.MANAGER_WHATSAPP); // e.g., 918347039945
+    params.append("message", JSON.stringify(messagePayload));
+    params.append("src.name", "cmsttee"); // Your App Name
 
-    const responseText = await watiResponse.text(); // Read as text first to avoid crashes
+    // 🟢 Send the POST request to Gupshup API
+    const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "apikey": process.env.GUPSHUP_API_KEY
+      },
+      body: params,
+    });
+
+    const data = await response.json();
     
-    if (responseText) {
-      const watiData = JSON.parse(responseText);
-      // Wati returns 'success' or true depending on account type
-      if (watiData.result === 'success' || watiData.ok === true || watiData.result === true) {
-        console.log("✅ Wati WhatsApp notification sent successfully!");
-      } else {
-        console.error("❌ Wati API Error:", watiData.info || watiData.message);
-      }
+    if (response.ok && data.status === "submitted") {
+      console.log("✅ Gupshup notification sent successfully. ID:", data.messageId);
+    } else {
+      console.error("❌ Gupshup API Error:", data);
     }
   } catch (e) {
-    console.error("❌ Wati Integration Failed:", e.message);
+    console.error("❌ Gupshup Integration Failed:", e.message);
   }
 }
 
