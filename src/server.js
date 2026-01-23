@@ -469,15 +469,26 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 /* =========================
    FIXED WATI.IO INTEGRATION
 ========================= */
+/* =========================
+   FIXED WATI.IO INTEGRATION
+========================= */
 if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.env.MANAGER_WHATSAPP) {
   try {
-    const messageText = `
+    // 1. Explicitly build the message content
+    const complaintInfo = `
 🆕 *New Complaint Received*
 *ID:* ${complaint.id}
-*Name:* ${submitter_name || "Anonymous"}
-*Dept:* ${department}
-*Issue:* ${complain_detail}
+*Dept:* ${complaint.department}
+*Priority:* ${complaint.priority || "Medium"}
+*Issue:* ${complaint.complain_detail}
     `.trim();
+
+    // 2. Safety check: ensure the message isn't empty
+    if (!complaintInfo) {
+      throw new Error("Complaint information is empty, skipping WhatsApp.");
+    }
+
+    console.log("📡 Sending to Wati for phone:", process.env.MANAGER_WHATSAPP);
 
     const watiResponse = await fetch(
       `${process.env.WATI_API_ENDPOINT}/api/v1/sendSessionMessage/${process.env.MANAGER_WHATSAPP}`,
@@ -487,26 +498,20 @@ if (process.env.WATI_API_ENDPOINT && process.env.WATI_ACCESS_TOKEN && process.en
           "Authorization": `Bearer ${process.env.WATI_ACCESS_TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messageText: messageText }),
+        // 🟢 Ensure the key is exactly 'messageText'
+        body: JSON.stringify({ messageText: complaintInfo }),
       }
     );
 
-    // 🟢 FIX: Get response as text first to avoid the "Unexpected end" error
     const responseText = await watiResponse.text();
     
     if (responseText) {
-      const watiData = JSON.parse(responseText); // Parse only if not empty
-      if (watiResponse.ok) {
-        console.log("✅ Wati notification sent:", watiData);
+      const watiData = JSON.parse(responseText);
+      // Wati returns success: true or result: 'success' depending on the version
+      if (watiData.result === 'success' || watiData.ok || watiData.result === true) {
+        console.log("✅ Wati WhatsApp notification sent successfully!");
       } else {
-        console.error("❌ Wati API returned error:", watiData);
-      }
-    } else {
-      // If response is empty but status is OK, it still worked!
-      if (watiResponse.ok) {
-        console.log("✅ Wati notification sent (Empty Success Response)");
-      } else {
-        console.error(`❌ Wati failed with status ${watiResponse.status} and no message body.`);
+        console.error("❌ Wati API rejected message:", watiData.info || watiData.message || watiData);
       }
     }
   } catch (e) {
