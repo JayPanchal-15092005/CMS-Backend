@@ -473,7 +473,7 @@ if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
 🆕 *New Complaint Received*
 *Name*: ${submitter_name}
 *Email*: ${submitter_email}
-*Dept:* ${department}
+*Department:* ${department}
 *Priority:* ${priority || "Medium"}
 *Issue:* ${complain_detail}
 *Location:* ${complain_location || "N/A"}
