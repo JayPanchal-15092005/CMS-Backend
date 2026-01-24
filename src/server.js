@@ -553,7 +553,6 @@ app.get("/api/employee/complaints/:id", requireAuth(), async (req, res) => {
       SELECT *
       FROM complaints
       WHERE id = $1 AND clerk_user_id = $2
-      admin_remarks
       `,
     [complaintId, clerkUserId],
   );
@@ -564,6 +563,8 @@ app.get("/api/employee/complaints/:id", requireAuth(), async (req, res) => {
 
   res.json({ complaint: result.rows[0] });
 });
+
+
 
 /* =========================
    SAVE EXPO PUSH TOKEN
