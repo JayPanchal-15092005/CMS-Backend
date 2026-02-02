@@ -5,6 +5,8 @@ import { Pool } from "pg";
 import { clerkMiddleware, requireAuth } from "@clerk/express";
 import twilio from "twilio";
 import { Expo } from "expo-server-sdk";
+import { sendEmail } from "./utils/emailService.js";
+import { getNewComplaintTemplate, getResolvedTemplate } from "./utils/emailTemplates.js";
 
 dotenv.config();
 
@@ -350,6 +352,20 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     const complaint = result.rows[0];
     console.log("✅ Complaint saved, ID:", complaint.id);
 
+    // Email Logic
+    const htmlContent = getNewComplaintTemplate({
+       email: req.body.submitter_email,
+      name: req.body.submitter_name,
+      department: req.body.department,
+      detail: req.body.complain_detail,
+      location: req.body.complain_location,
+      to_whom: req.body.to_whom,
+      priority: req.body.priority,
+      assets: JSON.stringify(req.body.assets || [])
+    });
+
+    await sendEmail("trywebsiteapp56@gmail.com", "New Complaint Received", htmlContent);
+
     // ✅ CRITICAL: Send notification IMMEDIATELY (not in setImmediate)
     try {
       console.log("\n🔔 ===== SENDING PUSH NOTIFICATION NOW =====");
@@ -672,17 +688,75 @@ app.get("/api/admin/complaints", adminAuth, async (req, res) => {
 //   }
 // });  // Do not remove this source code because there is the logic of the Employee app Notification.
 
+// app.post("/api/complaints/:id/resolve", async (req, res) => {
+//   try {
+//     const complaintId = req.params.id;
+//     const { remarks } = req.body; // 🟢 Captured from the frontend TextInput
+
+//     // 1️⃣ Update complaint with status and remarks
+//     const result = await pool.query(
+//       `UPDATE complaints 
+//        SET status = 'Resolved', admin_remarks = $1 
+//        WHERE id = $2 
+//        RETURNING clerk_user_id`,
+//       [remarks || null, complaintId]
+//     );
+
+//     if (result.rowCount === 0) {
+//       return res.status(404).json({ error: "Complaint not found" });
+//     }
+
+//     const clerkUserId = result.rows[0].clerk_user_id;
+
+//     // 2️⃣ Fetch employee devices
+//     const devices = await pool.query(
+//       `SELECT expo_push_token FROM user_devices WHERE clerk_user_id = $1`,
+//       [clerkUserId],
+//     );
+
+//     if (devices.rows.length === 0) {
+//       console.warn("⚠️ No device registered for clerk_user_id:", clerkUserId);
+//     }
+
+//     // 3️⃣ Prepare notifications
+//     const messages = devices.rows.map((d) => ({
+//       to: d.expo_push_token,
+//       sound: "default",
+//       title: "Complaint Resolved ✅",
+//       body: remarks ? `Resolved: ${remarks}` : "Your complaint has been resolved.", // 🟢 Optional: Include remarks in notification
+//       data: {
+//         screen: "complaint-details",
+//         complaintId,
+//       },
+//     }));
+
+//     // 4️⃣ Send notifications
+//     if (messages.length > 0) {
+//       await expo.sendPushNotificationsAsync(messages);
+//     }
+
+//     res.json({ success: true, message: "Complaint resolved with remarks" });
+//   } catch (err) {
+//     console.error("❌ Resolve error:", err);
+//     res.status(500).json({ error: "internal_server_error" });
+//   }
+// });  // Use this source code if the error is come in the Employee app notificaton 
+
+/* ======================================================
+   RESOLVE COMPLAINT ROUTE (With Email & Push Notification)
+====================================================== */
 app.post("/api/complaints/:id/resolve", async (req, res) => {
   try {
     const complaintId = req.params.id;
-    const { remarks } = req.body; // 🟢 Captured from the frontend TextInput
+    const { remarks } = req.body; 
 
-    // 1️⃣ Update complaint with status and remarks
+    // 🟢 1. UPDATE DB: Changed "RETURNING clerk_user_id" to "RETURNING *"
+    // This fetches the email, name, and details needed for the email template.
     const result = await pool.query(
       `UPDATE complaints 
        SET status = 'Resolved', admin_remarks = $1 
        WHERE id = $2 
-       RETURNING clerk_user_id`,
+       RETURNING *`, 
       [remarks || null, complaintId]
     );
 
@@ -690,9 +764,30 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       return res.status(404).json({ error: "Complaint not found" });
     }
 
-    const clerkUserId = result.rows[0].clerk_user_id;
+    // 🟢 Now we have the full complaint object!
+    const complaint = result.rows[0]; 
+    const clerkUserId = complaint.clerk_user_id;
 
-    // 2️⃣ Fetch employee devices
+    // 🟢 2. EMAIL NOTIFICATION (New Addition)
+    if (complaint.submitter_email) {
+      try {
+        const htmlContent = getResolvedTemplate({
+          email: complaint.submitter_email,
+          name: complaint.submitter_name,
+          detail: complaint.complain_detail,
+          remarks: remarks, 
+          location: complaint.complain_location
+        });
+
+        // Send email (no await, so it doesn't slow down the response)
+        sendEmail(complaint.submitter_email, "Complaint Resolved", htmlContent);
+        console.log(`📧 Resolved email sent to: ${complaint.submitter_email}`);
+      } catch (emailErr) {
+        console.error("⚠️ Email failed:", emailErr);
+      }
+    }
+
+    // 3️⃣ FETCH DEVICES (Existing Push Notification Logic)
     const devices = await pool.query(
       `SELECT expo_push_token FROM user_devices WHERE clerk_user_id = $1`,
       [clerkUserId],
@@ -702,19 +797,19 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       console.warn("⚠️ No device registered for clerk_user_id:", clerkUserId);
     }
 
-    // 3️⃣ Prepare notifications
+    // 4️⃣ PREPARE PUSH NOTIFICATIONS
     const messages = devices.rows.map((d) => ({
       to: d.expo_push_token,
       sound: "default",
       title: "Complaint Resolved ✅",
-      body: remarks ? `Resolved: ${remarks}` : "Your complaint has been resolved.", // 🟢 Optional: Include remarks in notification
+      body: remarks ? `Resolved: ${remarks}` : "Your complaint has been resolved.",
       data: {
         screen: "complaint-details",
         complaintId,
       },
     }));
 
-    // 4️⃣ Send notifications
+    // 5️⃣ SEND PUSH NOTIFICATIONS
     if (messages.length > 0) {
       await expo.sendPushNotificationsAsync(messages);
     }
