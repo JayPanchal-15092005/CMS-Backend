@@ -30,12 +30,12 @@ const getNewComplaintTemplate = (data) => {
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="font-weight: bold; color: #555; display: block; margin-bottom: 5px;">Complain Type / Detail</label>
+          <label style="font-weight: bold; color: #555; display: block; margin-bottom: 5px;">Complain Type / Details</label>
           <div style="border: 1px solid #ccc; padding: 10px; border-radius: 4px;">${data.detail}</div>
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="font-weight: bold; color: #555; display: block; margin-bottom: 5px;">Hardware to be replaced</label>
+          <label style="font-weight: bold; color: #555; display: block; margin-bottom: 5px;">Assets</label>
           <div style="border: 1px solid #ccc; padding: 10px; border-radius: 4px;">${data.assets ? JSON.parse(data.assets).join(", ") : "None"}</div>
         </div>
 

@@ -354,7 +354,7 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 
     // Email Logic
     const htmlContent = getNewComplaintTemplate({
-       email: req.body.submitter_email,
+      email: req.body.submitter_email,
       name: req.body.submitter_name,
       department: req.body.department,
       detail: req.body.complain_detail,
