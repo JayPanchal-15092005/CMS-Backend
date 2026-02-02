@@ -98,4 +98,8 @@ const getResolvedTemplate = (data) => {
   `;
 };
 
-module.exports = { getNewComplaintTemplate, getResolvedTemplate };
+// module.exports = { getNewComplaintTemplate, getResolvedTemplate };
+export {
+    getNewComplaintTemplate, 
+    getResolvedTemplate
+}
