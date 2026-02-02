@@ -780,7 +780,7 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
         });
 
         // Send email (no await, so it doesn't slow down the response)
-        sendEmail(complaint.submitter_email, "Complaint Resolved", htmlContent);
+        await sendEmail(complaint.submitter_email, "Complaint Resolved", htmlContent);
         console.log(`📧 Resolved email sent to: ${complaint.submitter_email}`);
       } catch (emailErr) {
         console.error("⚠️ Email failed:", emailErr);
