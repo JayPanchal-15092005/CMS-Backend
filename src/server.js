@@ -364,7 +364,7 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
       assets: JSON.stringify(req.body.assets || [])
     });
 
-    await sendEmail("trywebsiteapp56@gmail.com", "New Complaint Received", htmlContent);
+    await sendEmail("Itsupport@gujaratinfotech.com", "New Complaint Received", htmlContent);
 
     // ✅ CRITICAL: Send notification IMMEDIATELY (not in setImmediate)
     try {
