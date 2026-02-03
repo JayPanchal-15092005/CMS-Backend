@@ -80,7 +80,7 @@ const getResolvedTemplate = (data) => {
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="font-weight: bold; color: #555; display: block; margin-bottom: 5px;">Complain Detail</label>
+          <label style="font-weight: bold; color: #555; display: block; margin-bottom: 5px;">Complain Details</label>
           <div style="border: 1px solid #ccc; padding: 10px; border-radius: 4px; background-color: #f9f9f9;">${data.detail}</div>
         </div>
         
