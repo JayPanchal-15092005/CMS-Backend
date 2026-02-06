@@ -3,10 +3,12 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { Pool } from "pg";
 import { clerkMiddleware, requireAuth } from "@clerk/express";
-import twilio from "twilio";
+// import twilio from "twilio";
 import { Expo } from "expo-server-sdk";
 import { sendEmail } from "./utils/emailService.js";
 import { getNewComplaintTemplate, getResolvedTemplate } from "./utils/emailTemplates.js";
+import bodyParser from "body-parser";
+import { Webhook } from "svix";
 
 dotenv.config();
 
@@ -135,6 +137,64 @@ const requireAdmin = (req, res, next) => {
 app.get("/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });
+
+// clerk webhooks
+app.post(
+  '/api/webhooks', 
+  bodyParser.raw({ type: 'application/json' }), 
+  async (req, res) => {
+    
+    // 🟢 2. Verify the Webhook Signature (Security)
+    const SIGNING_SECRET = process.env.CLERK_WEBHOOK_SECRET;
+    if (!SIGNING_SECRET) {
+      throw new Error('Error: Please add CLERK_WEBHOOK_SECRET to .env');
+    }
+
+    const wh = new Webhook(SIGNING_SECRET);
+    const headers = req.headers;
+    const payload = req.body;
+
+    let evt;
+    try {
+      evt = wh.verify(payload, {
+        "svix-id": headers["svix-id"],
+        "svix-timestamp": headers["svix-timestamp"],
+        "svix-signature": headers["svix-signature"]
+      });
+    } catch (err) {
+      console.error('Error: Could not verify webhook:', err.message);
+      return res.status(400).json({ success: false, message: err.message });
+    }
+
+    // 🟢 3. Handle the "user.created" Event
+    const { id } = evt.data;
+    const eventType = evt.type;
+    console.log(`Webhook with an ID of ${id} and type of ${eventType}`);
+
+    if (eventType === 'user.created' || eventType === 'user.updated') {
+      const { id, email_addresses, first_name, last_name } = evt.data;
+      const email = email_addresses[0]?.email_address; // Get primary email
+
+      try {
+        // Upsert: Insert if new, Update if exists
+        await pool.query(
+          `INSERT INTO users (clerk_user_id, email, first_name, last_name)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (clerk_user_id) 
+           DO UPDATE SET email = $2, first_name = $3, last_name = $4`,
+          [id, email, first_name, last_name]
+        );
+        console.log(`✅ User ${id} synced to Neon DB`);
+      } catch (err) {
+        console.error('❌ Database Sync Error:', err);
+        return res.status(500).json({ success: false, message: 'DB Error' });
+      }
+    }
+
+    // 🟢 4. Return 200 OK to Clerk (Important!)
+    res.status(200).json({ success: true, message: 'Webhook received' });
+  }
+);
 
 /* =========================
    EMPLOYEE: SUBMIT COMPLAINT
