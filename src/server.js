@@ -54,57 +54,6 @@ const pool = new Pool({
 
 initDatabase();
 
-// clerk webhooks
-app.post(
-  "/api/webhooks",
-  bodyParser.raw({ type: "application/json" }), // Force raw data for this route only
-  async (req, res) => {
-    try {
-      const payload = req.body;
-      const headers = req.headers;
-
-      // Safety Check: Ensure payload exists before verifying
-      if (!payload) {
-        throw new Error("Payload is empty or undefined");
-      }
-
-      const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET);
-      
-      // Verify the payload
-      // Note: req.body is already a Buffer because of bodyParser.raw()
-      const evt = wh.verify(payload, {
-        "svix-id": headers["svix-id"],
-        "svix-timestamp": headers["svix-timestamp"],
-        "svix-signature": headers["svix-signature"],
-      });
-
-      const { id } = evt.data;
-      const eventType = evt.type;
-      console.log(`✅ Webhook verified: ${eventType}`);
-
-      // Sync User Data to Neon DB
-      if (eventType === "user.created" || eventType === "user.updated") {
-        const { id, email_addresses, first_name, last_name } = evt.data;
-        const email = email_addresses[0]?.email_address;
-
-        await pool.query(
-          `INSERT INTO users (clerk_user_id, email, first_name, last_name)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (clerk_user_id) 
-           DO UPDATE SET email = $2, first_name = $3, last_name = $4`,
-          [id, email, first_name, last_name]
-        );
-        console.log(`✅ User ${id} synced to Neon`);
-      }
-
-      res.status(200).json({ success: true, message: "Webhook received" });
-    } catch (err) {
-      console.error("❌ Webhook Error:", err.message);
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
-);
-
 /* =========================
    MIDDLEWARE
 ========================= */
