@@ -1093,7 +1093,22 @@ import { Expo } from "expo-server-sdk";
 import { sendEmail } from "./utils/emailService.js";
 import { getNewComplaintTemplate, getResolvedTemplate } from "./utils/emailTemplates.js";
 import admin from "firebase-admin";
-import serviceAccount from "../firebase-service-account.json"; // Ensure path is correct
+// import serviceAccount from "../firebase-service-account.json"; // Ensure path is correct
+
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const serviceAccount = JSON.parse(
+  fs.readFileSync(
+    path.join(__dirname, "../firebase-service-account.json"),
+    "utf-8"
+  )
+);
+
 
 dotenv.config();
 
