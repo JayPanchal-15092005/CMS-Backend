@@ -1303,6 +1303,54 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
       console.error("❌ Notification Error:", notifError);
     }
 
+    if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
+       try {
+        // 🟢 Build the dynamic message content
+    const complaintText = `
+🆕 *New Complaint Received*
+*Name*: ${submitter_name}
+*Email*: ${submitter_email}
+*Department:* ${department}
+*Priority:* ${priority || "Medium"}
+*Issue:* ${complain_detail}
+*Location:* ${complain_location || "N/A"}
+    `.trim();
+
+    const messagePayload = {
+      type: "text",
+      text: complaintText
+    };
+
+    // 🟢 Set up the URL-encoded parameters
+    const params = new URLSearchParams();
+    params.append("channel", "whatsapp");
+    params.append("source", "917834811114"); // Gupshup Sandbox Number
+    params.append("destination", process.env.MANAGER_WHATSAPP); // e.g., 918347039945
+    params.append("message", JSON.stringify(messagePayload));
+    params.append("src.name", "cmsttee"); // Your App Name
+
+    // 🟢 Send the POST request to Gupshup API
+    const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "apikey": process.env.GUPSHUP_API_KEY
+      },
+      body: params,
+    });
+
+    const data = await response.json();
+    
+    if (response.ok && data.status === "submitted") {
+      console.log("✅ Gupshup notification sent successfully. ID:", data.messageId);
+    } else {
+      console.error("❌ Gupshup API Error:", data);
+    }
+       } catch (error) {
+        console.error("❌ Gupshup Integration Failed:", error.message);
+       }
+    }
+
     res.status(201).json({ success: true, id: complaint.id, status: complaint.status });
   } catch (err) {
     console.error("❌ Submit error:", err);
