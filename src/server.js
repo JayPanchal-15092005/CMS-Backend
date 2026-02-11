@@ -1439,28 +1439,110 @@ app.get("/api/admin/complaints", adminAuth, async (req, res) => {
 /* =========================
    ADMIN: RESOLVE COMPLAINT
 ========================= */
+// app.post("/api/complaints/:id/resolve", async (req, res) => {
+//   try {
+//     const complaintId = req.params.id;
+//     const { remarks } = req.body;
+
+//     // 🟢 1. Update Complaint (Returns firebase_uid)
+//     const result = await pool.query(
+//       `UPDATE complaints 
+//        SET status = 'Resolved', admin_remarks = $1 
+//        WHERE id = $2 
+//        RETURNING *`, // Returns everything including firebase_uid and email
+//       [remarks || null, complaintId]
+//     );
+
+//     if (result.rowCount === 0) {
+//       return res.status(404).json({ error: "Complaint not found" });
+//     }
+
+//     const complaint = result.rows[0];
+//     const userId = complaint.firebase_uid; // 🟢 Get the Firebase UID
+
+//     // 🟢 2. Send Email
+//     if (complaint.submitter_email) {
+//       try {
+//         const htmlContent = getResolvedTemplate({
+//           email: complaint.submitter_email,
+//           name: complaint.submitter_name,
+//           detail: complaint.complain_detail,
+//           remarks: remarks, 
+//           location: complaint.complain_location
+//         });
+//         await sendEmail(complaint.submitter_email, "Complaint Resolved", htmlContent);
+//         console.log(`📧 Resolved email sent`);
+//       } catch (emailErr) {
+//         console.error("⚠️ Email failed:", emailErr);
+//       }
+//     }
+
+//     // 🟢 3. Fetch Device by firebase_uid
+//     const devices = await pool.query(
+//       `SELECT expo_push_token FROM user_devices WHERE firebase_uid = $1`,
+//       [userId],
+//     );
+
+//     // 4. Send Notification
+//     if (devices.rows.length > 0) {
+//       const messages = devices.rows.map((d) => ({
+//         to: d.expo_push_token,
+//         sound: "default",
+//         title: "Complaint Resolved ✅",
+//         body: remarks ? `Resolved: ${remarks}` : "Your complaint has been resolved.",
+//         data: { screen: "complaint-details", complaintId },
+//       }));
+
+//       await expo.sendPushNotificationsAsync(messages);
+//     }
+
+//     res.json({ success: true, message: "Resolved successfully" });
+//   } catch (err) {
+//     console.error("❌ Resolve error:", err);
+//     res.status(500).json({ error: "internal_server_error" });
+//     console.log("Complaint firebase_uid:", userId); //
+//     console.log("Devices found:", devices.rows); //
+//   }
+// });
+
 app.post("/api/complaints/:id/resolve", async (req, res) => {
+  // 🟢 Define these OUTSIDE the try block so 'catch' can see them
+  let userId = null;
+  let devices = { rows: [] }; 
+
   try {
     const complaintId = req.params.id;
     const { remarks } = req.body;
 
-    // 🟢 1. Update Complaint (Returns firebase_uid)
+    console.log(`\n🔍 Resolving Complaint ID: ${complaintId}`);
+
+    // 1. Update Complaint
     const result = await pool.query(
       `UPDATE complaints 
        SET status = 'Resolved', admin_remarks = $1 
        WHERE id = $2 
-       RETURNING *`, // Returns everything including firebase_uid and email
+       RETURNING *`, 
       [remarks || null, complaintId]
     );
 
     if (result.rowCount === 0) {
+      console.log("❌ Complaint not found in DB");
       return res.status(404).json({ error: "Complaint not found" });
     }
 
     const complaint = result.rows[0];
-    const userId = complaint.firebase_uid; // 🟢 Get the Firebase UID
+    
+    // 🟢 SAFETY CHECK: Handle both column names
+    // If you renamed the column, it is firebase_uid. If not, it is clerk_user_id.
+    userId = complaint.firebase_uid || complaint.clerk_user_id;
 
-    // 🟢 2. Send Email
+    console.log(`👤 User ID found for complaint: ${userId}`);
+
+    if (!userId) {
+      console.warn("⚠️ WARNING: No User ID found in this complaint row. Cannot send notification.");
+    }
+
+    // 2. Send Email (Keep your existing logic)
     if (complaint.submitter_email) {
       try {
         const htmlContent = getResolvedTemplate({
@@ -1470,18 +1552,18 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
           remarks: remarks, 
           location: complaint.complain_location
         });
-        await sendEmail(complaint.submitter_email, "Complaint Resolved", htmlContent);
-        console.log(`📧 Resolved email sent`);
-      } catch (emailErr) {
-        console.error("⚠️ Email failed:", emailErr);
-      }
+        sendEmail(complaint.submitter_email, "Complaint Resolved", htmlContent).catch(err => console.error("Email Error:", err));
+      } catch (e) {}
     }
 
-    // 🟢 3. Fetch Device by firebase_uid
-    const devices = await pool.query(
+    // 3. Fetch Device by userId
+    // 🟢 UPDATED QUERY: Matches your table structure
+    devices = await pool.query(
       `SELECT expo_push_token FROM user_devices WHERE firebase_uid = $1`,
       [userId],
     );
+
+    console.log(`📱 Devices found for user: ${devices.rows.length}`);
 
     // 4. Send Notification
     if (devices.rows.length > 0) {
@@ -1493,12 +1575,20 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
         data: { screen: "complaint-details", complaintId },
       }));
 
+      console.log("🚀 Sending Push Notification to Expo...");
       await expo.sendPushNotificationsAsync(messages);
+      console.log("✅ Notification Sent!");
+    } else {
+      console.log("📭 No device token found. Skipping notification.");
     }
 
     res.json({ success: true, message: "Resolved successfully" });
+    
   } catch (err) {
-    console.error("❌ Resolve error:", err);
+    console.error("❌ RESOLVE API ERROR:", err);
+    // Now these logs will work without crashing
+    console.log("Last UserID:", userId);
+    console.log("Last Devices Count:", devices?.rows?.length);
     res.status(500).json({ error: "internal_server_error" });
   }
 });
