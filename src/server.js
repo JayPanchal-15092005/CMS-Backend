@@ -25,10 +25,10 @@
 //   try {
 //     // Verify the token with Firebase
 //     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    
+
 //     // Attach the User ID to the request
 //     // Note: This is now a Firebase UID (e.g., "7a8s..."), not a Clerk ID
-//     req.auth = { userId: decodedToken.uid }; 
+//     req.auth = { userId: decodedToken.uid };
 //     req.userEmail = decodedToken.email;
 
 //     next();
@@ -87,7 +87,6 @@
 // ========================= */
 // app.use(cors());
 // app.use(express.json());
-
 
 // // Clerk is ONLY for Employee App
 // // app.use(clerkMiddleware());
@@ -166,8 +165,6 @@
 // app.get("/health", (req, res) => {
 //   res.json({ status: "ok", time: new Date().toISOString() });
 // });
-
-
 
 // /* =========================
 //    EMPLOYEE: SUBMIT COMPLAINT
@@ -505,7 +502,7 @@
 
 // //     console.log("✅ WhatsApp sent via Twilio. SID:", twilioResponse.sid);
 // //       } catch (error) {
-// //         console.error("❌ Twilio WhatsApp Error:", error.message);  
+// //         console.error("❌ Twilio WhatsApp Error:", error.message);
 // //         // Log the full error to Vercel logs to see if it's a Twilio config issue
 // //     console.error("Twilio Details:", error);
 // //       }
@@ -552,7 +549,7 @@
 //     });
 
 //     const data = await response.json();
-    
+
 //     if (response.ok && data.status === "submitted") {
 //       console.log("✅ Gupshup notification sent successfully. ID:", data.messageId);
 //     } else {
@@ -613,8 +610,6 @@
 //   res.json({ complaint: result.rows[0] });
 // });
 
-
-
 // /* =========================
 //    SAVE EXPO PUSH TOKEN
 // ========================= */
@@ -633,7 +628,7 @@
 //       `
 //       INSERT INTO user_devices (clerk_user_id, expo_push_token)
 //       VALUES ($1, $2)
-//       ON CONFLICT (expo_push_token) 
+//       ON CONFLICT (expo_push_token)
 //       DO UPDATE SET clerk_user_id = EXCLUDED.clerk_user_id, created_at = NOW()
 //       `,
 //       [clerkUserId, expoPushToken],
@@ -728,9 +723,9 @@
 
 // //     // 1️⃣ Update complaint with status and remarks
 // //     const result = await pool.query(
-// //       `UPDATE complaints 
-// //        SET status = 'Resolved', admin_remarks = $1 
-// //        WHERE id = $2 
+// //       `UPDATE complaints
+// //        SET status = 'Resolved', admin_remarks = $1
+// //        WHERE id = $2
 // //        RETURNING clerk_user_id`,
 // //       [remarks || null, complaintId]
 // //     );
@@ -773,7 +768,7 @@
 // //     console.error("❌ Resolve error:", err);
 // //     res.status(500).json({ error: "internal_server_error" });
 // //   }
-// // });  // Use this source code if the error is come in the Employee app notificaton 
+// // });  // Use this source code if the error is come in the Employee app notificaton
 
 // /* ======================================================
 //    RESOLVE COMPLAINT ROUTE (With Email & Push Notification)
@@ -781,15 +776,15 @@
 // app.post("/api/complaints/:id/resolve", async (req, res) => {
 //   try {
 //     const complaintId = req.params.id;
-//     const { remarks } = req.body; 
+//     const { remarks } = req.body;
 
 //     // 🟢 1. UPDATE DB: Changed "RETURNING clerk_user_id" to "RETURNING *"
 //     // This fetches the email, name, and details needed for the email template.
 //     const result = await pool.query(
-//       `UPDATE complaints 
-//        SET status = 'Resolved', admin_remarks = $1 
-//        WHERE id = $2 
-//        RETURNING *`, 
+//       `UPDATE complaints
+//        SET status = 'Resolved', admin_remarks = $1
+//        WHERE id = $2
+//        RETURNING *`,
 //       [remarks || null, complaintId]
 //     );
 
@@ -798,7 +793,7 @@
 //     }
 
 //     // 🟢 Now we have the full complaint object!
-//     const complaint = result.rows[0]; 
+//     const complaint = result.rows[0];
 //     const clerkUserId = complaint.clerk_user_id;
 
 //     // 🟢 2. EMAIL NOTIFICATION (New Addition)
@@ -808,7 +803,7 @@
 //           email: complaint.submitter_email,
 //           name: complaint.submitter_name,
 //           detail: complaint.complain_detail,
-//           remarks: remarks, 
+//           remarks: remarks,
 //           location: complaint.complain_location
 //         });
 
@@ -876,7 +871,7 @@
 //     const result = await pool.query(
 //       `INSERT INTO admin_devices (email, expo_push_token, updated_at)
 //        VALUES ($1, $2, NOW())
-//        ON CONFLICT (expo_push_token) 
+//        ON CONFLICT (expo_push_token)
 //        DO UPDATE SET email = EXCLUDED.email, updated_at = NOW()
 //        RETURNING *`,
 //       [email, expoPushToken],
@@ -905,26 +900,26 @@
 
 // //     // 1. Summary Stats (Total, High Priority, Status counts)
 // //     const summary = await pool.query(
-// //       `SELECT 
+// //       `SELECT
 // //   COUNT(*) as total,
 // //   COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
 // //   COUNT(*) FILTER (WHERE status = 'Pending') as pending,
 // //   COUNT(*) FILTER (WHERE priority = 'High') as high_priority,
 // //   COUNT(*) FILTER (WHERE priority = 'Medium') as medium_priority,
 // //   COUNT(*) FILTER (WHERE priority = 'Low') as low_priority
-// // FROM complaints 
+// // FROM complaints
 // // WHERE created_at::date BETWEEN $1 AND $2`,
 // //       [startDate, endDate],
 // //     );
 
 // //     // 2. ADVANCED: Full Department Breakdown
 // //     const deptStats = await pool.query(
-// //       `SELECT 
-// //         department, 
+// //       `SELECT
+// //         department,
 // //         COUNT(*) as total,
 // //         COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
 // //         COUNT(*) FILTER (WHERE priority = 'High') as high_priority
-// //        FROM complaints 
+// //        FROM complaints
 // //        WHERE created_at::date BETWEEN $1 AND $2
 // //        GROUP BY department
 // //        ORDER BY total DESC`,
@@ -954,7 +949,7 @@
 //     }
 
 //     const summary = await pool.query(
-//       `SELECT 
+//       `SELECT
 //         COUNT(*) as total,
 //         COUNT(*) FILTER (WHERE status = 'Resolved') as resolved,
 //         COUNT(*) FILTER (WHERE status = 'Pending') as pending,
@@ -1091,18 +1086,19 @@ import dotenv from "dotenv";
 import { Pool } from "pg";
 import { Expo } from "expo-server-sdk";
 import { sendEmail } from "./utils/emailService.js";
-import { getNewComplaintTemplate, getResolvedTemplate } from "./utils/emailTemplates.js";
+import {
+  getNewComplaintTemplate,
+  getResolvedTemplate,
+} from "./utils/emailTemplates.js";
 import admin from "firebase-admin";
 // import serviceAccount from "../firebase-service-account.json"; // Ensure path is correct
-
-
 
 dotenv.config();
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 // 🟢 1. Initialize Firebase Admin
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
 
 // 🟢 2. Firebase Middleware (Replaces Clerk)
@@ -1117,9 +1113,9 @@ const requireAuth = () => async (req, res, next) => {
 
   try {
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    
+
     // 🟢 Save the Firebase UID as 'userId'
-    req.auth = { userId: decodedToken.uid }; 
+    req.auth = { userId: decodedToken.uid };
     req.userEmail = decodedToken.email;
 
     next();
@@ -1192,7 +1188,10 @@ pool
 ========================= */
 const ADMIN_USERS = [
   { email: "jayp93393@gmail.com", password: "JayPanchal15092005" },
-  { email: "itsupport@gujaratinfotech.com", password: "itsupport@gujaratinfotech.com" },
+  {
+    email: "itsupport@gujaratinfotech.com",
+    password: "itsupport@gujaratinfotech.com",
+  },
   { email: "gujaratinfotech.com", password: "gujaratinfotech.com" },
 ];
 
@@ -1200,13 +1199,15 @@ const adminAuth = (req, res, next) => {
   const email = req.headers["x-admin-email"];
   const password = req.headers["x-admin-password"];
 
-  if (!email || !password) return res.status(401).json({ error: "Missing credentials" });
+  if (!email || !password)
+    return res.status(401).json({ error: "Missing credentials" });
 
   const isValidAdmin = ADMIN_USERS.some(
     (admin) => admin.email === email.trim() && admin.password === password,
   );
 
-  if (!isValidAdmin) return res.status(403).json({ error: "Unauthorized admin" });
+  if (!isValidAdmin)
+    return res.status(403).json({ error: "Unauthorized admin" });
   next();
 };
 
@@ -1263,26 +1264,33 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 
     // --- EMAIL LOGIC ---
     try {
-        const htmlContent = getNewComplaintTemplate({
-            email: req.body.submitter_email,
-            name: req.body.submitter_name,
-            department: req.body.department,
-            detail: req.body.complain_detail,
-            location: req.body.complain_location,
-            to_whom: req.body.to_whom,
-            priority: req.body.priority,
-            assets: JSON.stringify(req.body.assets || [])
-        });
-        // Send email (no await to prevent blocking)
-        sendEmail("Itsupport@gujaratinfotech.com", "New Complaint Received", htmlContent);
-    } catch (e) { console.error("Email failed", e); }
-
+      const htmlContent = getNewComplaintTemplate({
+        email: req.body.submitter_email,
+        name: req.body.submitter_name,
+        department: req.body.department,
+        detail: req.body.complain_detail,
+        location: req.body.complain_location,
+        to_whom: req.body.to_whom,
+        priority: req.body.priority,
+        assets: JSON.stringify(req.body.assets || []),
+      });
+      // Send email (no await to prevent blocking)
+      sendEmail(
+        "Itsupport@gujaratinfotech.com",
+        "New Complaint Received",
+        htmlContent,
+      );
+    } catch (e) {
+      console.error("Email failed", e);
+    }
 
     // --- PUSH NOTIFICATION (ADMIN) ---
     try {
-      const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
+      const adminDevices = await pool.query(
+        "SELECT expo_push_token FROM admin_devices",
+      );
       const messages = [];
-      
+
       for (const device of adminDevices.rows) {
         if (!Expo.isExpoPushToken(device.expo_push_token)) continue;
 
@@ -1304,9 +1312,9 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
     }
 
     if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
-       try {
+      try {
         // 🟢 Build the dynamic message content
-    const complaintText = `
+        const complaintText = `
 🆕 *New Complaint Received*
 *Name*: ${submitter_name}
 *Email*: ${submitter_email}
@@ -1316,42 +1324,47 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
 *Location:* ${complain_location || "N/A"}
     `.trim();
 
-    const messagePayload = {
-      type: "text",
-      text: complaintText
-    };
+        const messagePayload = {
+          type: "text",
+          text: complaintText,
+        };
 
-    // 🟢 Set up the URL-encoded parameters
-    const params = new URLSearchParams();
-    params.append("channel", "whatsapp");
-    params.append("source", "917834811114"); // Gupshup Sandbox Number
-    params.append("destination", process.env.MANAGER_WHATSAPP); // e.g., 918347039945
-    params.append("message", JSON.stringify(messagePayload));
-    params.append("src.name", "cmsttee"); // Your App Name
+        // 🟢 Set up the URL-encoded parameters
+        const params = new URLSearchParams();
+        params.append("channel", "whatsapp");
+        params.append("source", "917834811114"); // Gupshup Sandbox Number
+        params.append("destination", process.env.MANAGER_WHATSAPP); // e.g., 918347039945
+        params.append("message", JSON.stringify(messagePayload));
+        params.append("src.name", "cmsttee"); // Your App Name
 
-    // 🟢 Send the POST request to Gupshup API
-    const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "apikey": process.env.GUPSHUP_API_KEY
-      },
-      body: params,
-    });
+        // 🟢 Send the POST request to Gupshup API
+        const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            apikey: process.env.GUPSHUP_API_KEY,
+          },
+          body: params,
+        });
 
-    const data = await response.json();
-    
-    if (response.ok && data.status === "submitted") {
-      console.log("✅ Gupshup notification sent successfully. ID:", data.messageId);
-    } else {
-      console.error("❌ Gupshup API Error:", data);
-    }
-       } catch (error) {
+        const data = await response.json();
+
+        if (response.ok && data.status === "submitted") {
+          console.log(
+            "✅ Gupshup notification sent successfully. ID:",
+            data.messageId,
+          );
+        } else {
+          console.error("❌ Gupshup API Error:", data);
+        }
+      } catch (error) {
         console.error("❌ Gupshup Integration Failed:", error.message);
-       }
+      }
     }
 
-    res.status(201).json({ success: true, id: complaint.id, status: complaint.status });
+    res
+      .status(201)
+      .json({ success: true, id: complaint.id, status: complaint.status });
   } catch (err) {
     console.error("❌ Submit error:", err);
     res.status(500).json({ error: "internal_server_error" });
@@ -1439,76 +1452,11 @@ app.get("/api/admin/complaints", adminAuth, async (req, res) => {
 /* =========================
    ADMIN: RESOLVE COMPLAINT
 ========================= */
-// app.post("/api/complaints/:id/resolve", async (req, res) => {
-//   try {
-//     const complaintId = req.params.id;
-//     const { remarks } = req.body;
-
-//     // 🟢 1. Update Complaint (Returns firebase_uid)
-//     const result = await pool.query(
-//       `UPDATE complaints 
-//        SET status = 'Resolved', admin_remarks = $1 
-//        WHERE id = $2 
-//        RETURNING *`, // Returns everything including firebase_uid and email
-//       [remarks || null, complaintId]
-//     );
-
-//     if (result.rowCount === 0) {
-//       return res.status(404).json({ error: "Complaint not found" });
-//     }
-
-//     const complaint = result.rows[0];
-//     const userId = complaint.firebase_uid; // 🟢 Get the Firebase UID
-
-//     // 🟢 2. Send Email
-//     if (complaint.submitter_email) {
-//       try {
-//         const htmlContent = getResolvedTemplate({
-//           email: complaint.submitter_email,
-//           name: complaint.submitter_name,
-//           detail: complaint.complain_detail,
-//           remarks: remarks, 
-//           location: complaint.complain_location
-//         });
-//         await sendEmail(complaint.submitter_email, "Complaint Resolved", htmlContent);
-//         console.log(`📧 Resolved email sent`);
-//       } catch (emailErr) {
-//         console.error("⚠️ Email failed:", emailErr);
-//       }
-//     }
-
-//     // 🟢 3. Fetch Device by firebase_uid
-//     const devices = await pool.query(
-//       `SELECT expo_push_token FROM user_devices WHERE firebase_uid = $1`,
-//       [userId],
-//     );
-
-//     // 4. Send Notification
-//     if (devices.rows.length > 0) {
-//       const messages = devices.rows.map((d) => ({
-//         to: d.expo_push_token,
-//         sound: "default",
-//         title: "Complaint Resolved ✅",
-//         body: remarks ? `Resolved: ${remarks}` : "Your complaint has been resolved.",
-//         data: { screen: "complaint-details", complaintId },
-//       }));
-
-//       await expo.sendPushNotificationsAsync(messages);
-//     }
-
-//     res.json({ success: true, message: "Resolved successfully" });
-//   } catch (err) {
-//     console.error("❌ Resolve error:", err);
-//     res.status(500).json({ error: "internal_server_error" });
-//     console.log("Complaint firebase_uid:", userId); //
-//     console.log("Devices found:", devices.rows); //
-//   }
-// });
 
 app.post("/api/complaints/:id/resolve", async (req, res) => {
   // 🟢 Define these OUTSIDE the try block so 'catch' can see them
   let userId = null;
-  let devices = { rows: [] }; 
+  let devices = { rows: [] };
 
   try {
     const complaintId = req.params.id;
@@ -1521,8 +1469,8 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
       `UPDATE complaints 
        SET status = 'Resolved', admin_remarks = $1 
        WHERE id = $2 
-       RETURNING *`, 
-      [remarks || null, complaintId]
+       RETURNING *`,
+      [remarks || null, complaintId],
     );
 
     if (result.rowCount === 0) {
@@ -1531,7 +1479,7 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
     }
 
     const complaint = result.rows[0];
-    
+
     // 🟢 SAFETY CHECK: Handle both column names
     // If you renamed the column, it is firebase_uid. If not, it is clerk_user_id.
     userId = complaint.firebase_uid || complaint.clerk_user_id;
@@ -1539,7 +1487,9 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
     console.log(`👤 User ID found for complaint: ${userId}`);
 
     if (!userId) {
-      console.warn("⚠️ WARNING: No User ID found in this complaint row. Cannot send notification.");
+      console.warn(
+        "⚠️ WARNING: No User ID found in this complaint row. Cannot send notification.",
+      );
     }
 
     // 2. Send Email (Keep your existing logic)
@@ -1549,10 +1499,14 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
           email: complaint.submitter_email,
           name: complaint.submitter_name,
           detail: complaint.complain_detail,
-          remarks: remarks, 
-          location: complaint.complain_location
+          remarks: remarks,
+          location: complaint.complain_location,
         });
-        sendEmail(complaint.submitter_email, "Complaint Resolved", htmlContent).catch(err => console.error("Email Error:", err));
+        await sendEmail(
+          complaint.submitter_email,
+          "Complaint Resolved",
+          htmlContent,
+        ).catch((err) => console.error("Email Error:", err));
       } catch (e) {}
     }
 
@@ -1571,7 +1525,9 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
         to: d.expo_push_token,
         sound: "default",
         title: "Complaint Resolved ✅",
-        body: remarks ? `Resolved: ${remarks}` : "Your complaint has been resolved.",
+        body: remarks
+          ? `Resolved: ${remarks}`
+          : "Your complaint has been resolved.",
         data: { screen: "complaint-details", complaintId },
       }));
 
@@ -1583,7 +1539,6 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
     }
 
     res.json({ success: true, message: "Resolved successfully" });
-    
   } catch (err) {
     console.error("❌ RESOLVE API ERROR:", err);
     // Now these logs will work without crashing
@@ -1599,7 +1554,8 @@ app.post("/api/complaints/:id/resolve", async (req, res) => {
 app.post("/api/admin/devices/register", async (req, res) => {
   try {
     const { email, password, expoPushToken } = req.body;
-    if (!email || !expoPushToken) return res.status(400).json({ error: "Missing data" });
+    if (!email || !expoPushToken)
+      return res.status(400).json({ error: "Missing data" });
 
     const isValidAdmin = ADMIN_USERS.some(
       (admin) => admin.email === email && admin.password === password,
@@ -1630,7 +1586,7 @@ app.get("/api/admin/reports", adminAuth, async (req, res) => {
     let queryParams = [startDate, endDate];
     let filterClause = "WHERE created_at::date BETWEEN $1 AND $2";
 
-    if (department && department !== 'All') {
+    if (department && department !== "All") {
       filterClause += " AND department = $3";
       queryParams.push(department);
     }
@@ -1642,14 +1598,14 @@ app.get("/api/admin/reports", adminAuth, async (req, res) => {
         COUNT(*) FILTER (WHERE status = 'Pending') as pending,
         COUNT(*) FILTER (WHERE priority = 'High') as high_priority
        FROM complaints ${filterClause}`,
-      queryParams
+      queryParams,
     );
 
     const deptStats = await pool.query(
       `SELECT department, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'Resolved') as resolved
        FROM complaints ${filterClause}
        GROUP BY department ORDER BY total DESC`,
-      queryParams
+      queryParams,
     );
 
     res.json({ summary: summary.rows[0], deptStats: deptStats.rows });
@@ -1664,12 +1620,12 @@ app.get("/api/admin/reports", adminAuth, async (req, res) => {
 app.get("/api/admin/complaints/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
-      `SELECT * FROM complaints WHERE id = $1`,
-      [id],
-    );
+    const result = await pool.query(`SELECT * FROM complaints WHERE id = $1`, [
+      id,
+    ]);
 
-    if (!result.rows.length) return res.status(404).json({ error: "Not found" });
+    if (!result.rows.length)
+      return res.status(404).json({ error: "Not found" });
     res.json({ complaint: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: "internal_server_error" });
