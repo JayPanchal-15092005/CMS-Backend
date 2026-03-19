@@ -13,6 +13,9 @@ import admin from "firebase-admin";
 import ImageKit from "imagekit";
 dotenv.config();
 
+const app = express();
+const expo = new Expo();
+
 // 🟢 2. Initialize ImageKit (Put this near your database connection code)
 const imagekit = new ImageKit({
   publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
@@ -60,9 +63,6 @@ app.get("/api/imagekit/auth", (req, res) => {
     res.status(500).json({ error: "Could not generate auth parameters" });
   }
 });
-
-const app = express();
-const expo = new Expo();
 
 // 🟢 3. Database Init (Updated Column Names)
 async function initDatabase() {
