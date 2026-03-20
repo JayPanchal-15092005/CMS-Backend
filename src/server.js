@@ -56,6 +56,7 @@ const requireAuth = () => async (req, res, next) => {
 // 🟢 3. Add the Auth Route (This gives the frontend permission to upload)
 app.get("/api/imagekit/auth", (req, res) => {
   try {
+    if (!imagekit) return res.status(500).json({ error: "ImageKit missing" });
     const authenticationParameters = imagekit.getAuthenticationParameters();
     res.json(authenticationParameters);
   } catch (err) {
@@ -183,21 +184,33 @@ app.post("/api/complaints", requireAuth(), async (req, res) => {
       // )
       // VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,'Pending',NOW())
       // RETURNING *`,
-      `INSERT INTO complaints 
-  (firebase_uid, department, complain_detail, complain_location, to_whom, submitter_name, submitter_email, image_url) 
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO complaints (
+        firebase_uid, 
+        submitter_name, 
+        submitter_email, 
+        department, 
+        assets, 
+        complain_detail, 
+        complain_location, 
+        to_whom, 
+        priority, 
+        status, 
+        image_url
+      ) 
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, 'Pending', $10) 
+      RETURNING *`,
       [
-        userId,
-        submitter_name?.trim() || "Anonymous",
-        submitter_email || null,
-        department,
-        JSON.stringify(assets || []),
-        complain_detail,
-        complain_location || null,
-        to_whom || null,
-        priority || "Medium",
-        image_url || null
-      ],
+        userId,                                // $1: firebase_uid
+        submitter_name?.trim() || "Anonymous", // $2: submitter_name
+        submitter_email || null,               // $3: submitter_email
+        department,                            // $4: department
+        JSON.stringify(assets || []),          // $5: assets
+        complain_detail,                       // $6: complain_detail
+        complain_location || null,             // $7: complain_location
+        to_whom || null,                       // $8: to_whom
+        priority || "Medium",                  // $9: priority
+        image_url || null                      // $10: image_url
+      ]
     );
 
     const complaint = result.rows[0];
