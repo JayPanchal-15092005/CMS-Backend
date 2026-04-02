@@ -212,4 +212,28 @@ router.post("/devices/register", requireAuth(), async (req, res) => {
   }
 });
 
+// POST: Submit Daily Report
+router.post("/daily-reports", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const { employee_name, work_details } = req.body;
+    const employee_email = req.userEmail; // Safely pulled from Firebase token!
+
+    if (!work_details) {
+      return res.status(400).json({ error: "Work details are required" });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO daily_reports (firebase_uid, employee_name, employee_email, work_details) 
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [userId, employee_name || "Employee", employee_email, work_details]
+    );
+
+    res.status(201).json({ success: true, report: result.rows[0] });
+  } catch (err) {
+    console.error("Daily Report Submit Error:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
 export default router;
