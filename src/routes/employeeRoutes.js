@@ -12,7 +12,17 @@ const expo = new Expo();
 router.post("/complaints", requireAuth(), async (req, res) => {
   try {
     const userId = req.auth.userId;
-    const { submitter_name, submitter_email, department, assets, complain_detail, complain_location, to_whom, priority, image_url } = req.body;
+    const {
+      submitter_name,
+      submitter_email,
+      department,
+      assets,
+      complain_detail,
+      complain_location,
+      to_whom,
+      priority,
+      image_url,
+    } = req.body;
 
     const result = await pool.query(
       `INSERT INTO complaints (
@@ -31,24 +41,24 @@ router.post("/complaints", requireAuth(), async (req, res) => {
       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, 'Pending', $10) 
       RETURNING *`,
       [
-        userId,                                // $1: firebase_uid
+        userId, // $1: firebase_uid
         submitter_name?.trim() || "Anonymous", // $2: submitter_name
-        submitter_email || null,               // $3: submitter_email
-        department,                            // $4: department
-        JSON.stringify(assets || []),          // $5: assets
-        complain_detail,                       // $6: complain_detail
-        complain_location || null,             // $7: complain_location
-        to_whom || null,                       // $8: to_whom
-        priority || "Medium",                  // $9: priority
-        image_url || null                      // $10: image_url
-      ]
+        submitter_email || null, // $3: submitter_email
+        department, // $4: department
+        JSON.stringify(assets || []), // $5: assets
+        complain_detail, // $6: complain_detail
+        complain_location || null, // $7: complain_location
+        to_whom || null, // $8: to_whom
+        priority || "Medium", // $9: priority
+        image_url || null, // $10: image_url
+      ],
     );
 
     const complaint = result.rows[0];
 
     // Email Logic
     try {
-    const htmlContent = getNewComplaintTemplate({
+      const htmlContent = getNewComplaintTemplate({
         email: req.body.submitter_email,
         name: req.body.submitter_name,
         department: req.body.department,
@@ -64,11 +74,13 @@ router.post("/complaints", requireAuth(), async (req, res) => {
         "New Complaint Received",
         htmlContent,
       );
-    } catch (e) { console.error("Email failed", e); }
+    } catch (e) {
+      console.error("Email failed", e);
+    }
 
     // Push Notification Logic
     try {
-        const adminDevices = await pool.query(
+      const adminDevices = await pool.query(
         "SELECT expo_push_token FROM admin_devices",
       );
       const messages = [];
@@ -94,7 +106,7 @@ router.post("/complaints", requireAuth(), async (req, res) => {
     }
 
     // Gupshup Logic
-     if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
+    if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
       try {
         // 🟢 Build the dynamic message content
         const complaintText = `
@@ -145,7 +157,9 @@ router.post("/complaints", requireAuth(), async (req, res) => {
       }
     }
 
-    res.status(201).json({ success: true, id: complaint.id, status: complaint.status });
+    res
+      .status(201)
+      .json({ success: true, id: complaint.id, status: complaint.status });
   } catch (err) {
     console.error("Submit error:", err);
     res.status(500).json({ error: "internal_server_error" });
@@ -170,7 +184,7 @@ router.get("/complaints", requireAuth(), async (req, res) => {
 
 // GET COMPLAINT DETAILS
 router.get("/complaints/:id", requireAuth(), async (req, res) => {
-   const userId = req.auth.userId;
+  const userId = req.auth.userId;
   const complaintId = req.params.id;
 
   // 🟢 UPDATED SQL: Using firebase_uid
@@ -189,7 +203,7 @@ router.get("/complaints/:id", requireAuth(), async (req, res) => {
 // REGISTER DEVICE
 router.post("/devices/register", requireAuth(), async (req, res) => {
   try {
-     const userId = req.auth.userId;
+    const userId = req.auth.userId;
     const { expoPushToken, email } = req.body; // Added email if available
 
     if (!userId || !expoPushToken) {
@@ -226,12 +240,157 @@ router.post("/daily-reports", requireAuth(), async (req, res) => {
     const result = await pool.query(
       `INSERT INTO daily_reports (firebase_uid, employee_name, employee_email, work_details) 
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [userId, employee_name || "Employee", employee_email, work_details]
+      [userId, employee_name || "Employee", employee_email, work_details],
     );
 
     res.status(201).json({ success: true, report: result.rows[0] });
   } catch (err) {
     console.error("Daily Report Submit Error:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
+// GET: Employee Daily Reports History
+// GET: Employee Daily Reports History
+router.get("/daily-reports", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+
+    // 🟢 FIX: We added "AT TIME ZONE 'UTC'" to the created_at column.
+    // This forces Postgres to attach the exact global timezone so your local laptop doesn't misread it!
+    const result = await pool.query(
+      `SELECT id, work_details, created_at AT TIME ZONE 'UTC' as created_at 
+       FROM daily_reports 
+       WHERE firebase_uid = $1 
+       ORDER BY created_at DESC`,
+      [userId],
+    );
+
+    res.json({ reports: result.rows });
+  } catch (err) {
+    console.error("Fetch Daily Reports Error:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
+// POST: Submit a stationery request (with transactional line items)
+router.post("/stationery-requests", requireAuth(), async (req, res) => {
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN"); // 🟢 Start transactional commit
+
+    const userId = req.auth.userId;
+    const { items, employee_name } = req.body; // Array of { name, quantity }
+    const employee_email = req.userEmail;
+
+    if (!items || items.length === 0) {
+      await client.query("ROLLBACK"); // Cancel if no items
+      return res.status(400).json({ error: "At least one item is required." });
+    }
+
+    // 1. Create the main request entry
+    const requestResult = await client.query(
+      `INSERT INTO stationery_requests (firebase_uid, employee_name, employee_email)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [userId, employee_name, employee_email],
+    );
+    const requestId = requestResult.rows[0].id;
+
+    // 2. Insert all the items for this request
+    const itemQueries = items.map((item) =>
+      client.query(
+        `INSERT INTO stationery_request_items (request_id, item_name, quantity) 
+           VALUES ($1, $2, $3)`,
+        [requestId, item.name, parseInt(item.quantity)],
+      ),
+    );
+    await Promise.all(itemQueries); // Run all item inserts
+
+    await client.query("COMMIT"); // 🟢 Securely save all changes
+    res.status(201).json({ success: true, requestId });
+  } catch (err) {
+    if (client) await client.query("ROLLBACK"); // Abort on any error
+    console.error("Stationery Request Error:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// GET: Fetch Stationery Request History for an Employee
+// GET: Fetch Stationery Request History for an Employee
+router.get("/stationery-requests", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+
+    // 🟢 FIX: We use TO_CHAR to force Postgres to output a strict ISO-8601 UTC string.
+    // This stops Node.js from "guessing" the timezone and messing it up before it reaches the phone.
+    const result = await pool.query(
+      `SELECT r.id, TO_CHAR(r.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at, r.status, 
+                ARRAY_AGG(JSON_BUILD_OBJECT('name', i.item_name, 'quantity', i.quantity)) AS items
+         FROM stationery_requests r
+         JOIN stationery_request_items i ON r.id = i.request_id
+         WHERE r.firebase_uid = $1
+         GROUP BY r.id, r.created_at, r.status
+         ORDER BY r.created_at DESC`,
+      [userId],
+    );
+
+    res.json({ requests: result.rows });
+  } catch (err) {
+    console.error("Fetch Stationery History Error:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
+// POST: Submit a Mobile Recharge Request
+router.post("/mob-recharges", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const employee_email = req.userEmail;
+    
+    // Grabbing all the fields sent from the phone app
+    const { 
+      employee_name, mobile_no, operator, recharge_amount, 
+      department, approved_by_hr, last_recharge_date 
+    } = req.body;
+
+    if (!mobile_no || !recharge_amount) {
+      return res.status(400).json({ error: "Mobile number and amount are required" });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO mob_recharge_requests 
+        (firebase_uid, employee_name, employee_email, mobile_no, operator, recharge_amount, department, approved_by_hr, last_recharge_date) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [userId, employee_name, employee_email, mobile_no, operator, recharge_amount, department, approved_by_hr, last_recharge_date]
+    );
+
+    res.status(201).json({ success: true, requestId: result.rows[0].id });
+  } catch (err) {
+    console.error("Mob Recharge Submit Error:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
+// GET: Fetch Mobile Recharge History (With bulletproof Timezone fix!)
+router.get("/mob-recharges", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+
+    const result = await pool.query(
+      `SELECT id, mobile_no, operator, recharge_amount, status, 
+              TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at 
+       FROM mob_recharge_requests 
+       WHERE firebase_uid = $1 
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    res.json({ requests: result.rows });
+  } catch (err) {
+    console.error("Fetch Mob Recharge Error:", err);
     res.status(500).json({ error: "internal_server_error" });
   }
 });
