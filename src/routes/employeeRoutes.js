@@ -106,56 +106,56 @@ router.post("/complaints", requireAuth(), async (req, res) => {
     }
 
     // Gupshup Logic
-    if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
-      try {
-        // 🟢 Build the dynamic message content
-        const complaintText = `
-🆕 *New Complaint Received*
-*Name*: ${submitter_name}
-*Email*: ${submitter_email}
-*Department:* ${department}
-*Priority:* ${priority || "Medium"}
-*Issue:* ${complain_detail}
-*Location:* ${complain_location || "N/A"}
-    `.trim();
+//     if (process.env.GUPSHUP_API_KEY && process.env.MANAGER_WHATSAPP) {
+//       try {
+//         // 🟢 Build the dynamic message content
+//         const complaintText = `
+// 🆕 *New Complaint Received*
+// *Name*: ${submitter_name}
+// *Email*: ${submitter_email}
+// *Department:* ${department}
+// *Priority:* ${priority || "Medium"}
+// *Issue:* ${complain_detail}
+// *Location:* ${complain_location || "N/A"}
+//     `.trim();
 
-        const messagePayload = {
-          type: "text",
-          text: complaintText,
-        };
+//         const messagePayload = {
+//           type: "text",
+//           text: complaintText,
+//         };
 
-        // 🟢 Set up the URL-encoded parameters
-        const params = new URLSearchParams();
-        params.append("channel", "whatsapp");
-        params.append("source", "917834811114"); // Gupshup Sandbox Number
-        params.append("destination", process.env.MANAGER_WHATSAPP); // e.g., 918347039945
-        params.append("message", JSON.stringify(messagePayload));
-        params.append("src.name", "cmsttee"); // Your App Name
+//         // 🟢 Set up the URL-encoded parameters
+//         const params = new URLSearchParams();
+//         params.append("channel", "whatsapp");
+//         params.append("source", "917834811114"); // Gupshup Sandbox Number
+//         params.append("destination", process.env.MANAGER_WHATSAPP); // e.g., 918347039945
+//         params.append("message", JSON.stringify(messagePayload));
+//         params.append("src.name", "cmsttee"); // Your App Name
 
-        // 🟢 Send the POST request to Gupshup API
-        const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            apikey: process.env.GUPSHUP_API_KEY,
-          },
-          body: params,
-        });
+//         // 🟢 Send the POST request to Gupshup API
+//         const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+//           method: "POST",
+//           headers: {
+//             "Content-Type": "application/x-www-form-urlencoded",
+//             apikey: process.env.GUPSHUP_API_KEY,
+//           },
+//           body: params,
+//         });
 
-        const data = await response.json();
+//         const data = await response.json();
 
-        if (response.ok && data.status === "submitted") {
-          console.log(
-            "✅ Gupshup notification sent successfully. ID:",
-            data.messageId,
-          );
-        } else {
-          console.error("❌ Gupshup API Error:", data);
-        }
-      } catch (error) {
-        console.error("❌ Gupshup Integration Failed:", error.message);
-      }
-    }
+//         if (response.ok && data.status === "submitted") {
+//           console.log(
+//             "✅ Gupshup notification sent successfully. ID:",
+//             data.messageId,
+//           );
+//         } else {
+//           console.error("❌ Gupshup API Error:", data);
+//         }
+//       } catch (error) {
+//         console.error("❌ Gupshup Integration Failed:", error.message);
+//       }
+//     }
 
     res
       .status(201)
@@ -367,7 +367,16 @@ router.post("/mob-recharges", requireAuth(), async (req, res) => {
       [userId, employee_name, employee_email, mobile_no, operator, recharge_amount, department, approved_by_hr, last_recharge_date]
     );
 
+    // 🟢 FIRE THE WHATSAPP ALERT AUTOMATICALLY
+    // Pass the destination phone number and the exact message you want them to see
+    const alertMessage = `New Mobile Recharge Request!\nEmployee: ${employee_name}\nAmount: ₹${recharge_amount}`;
+    
+    // Replace with your verified Meta test phone number (e.g., "919876543210")
+    await sendN8nWhatsAppAlert("918347039945", alertMessage);
+
     res.status(201).json({ success: true, requestId: result.rows[0].id });
+
+    
   } catch (err) {
     console.error("Mob Recharge Submit Error:", err);
     res.status(500).json({ error: "internal_server_error" });
@@ -394,5 +403,28 @@ router.get("/mob-recharges", requireAuth(), async (req, res) => {
     res.status(500).json({ error: "internal_server_error" });
   }
 });
+
+// 🟢 The secure n8n Webhook Caller
+async function sendN8nWhatsAppAlert(phone, message) {
+  try {
+    // ⚠️ Make sure this matches the Production URL you copied from n8n
+    const N8N_WEBHOOK_URL = "http://localhost:5678/webhook/3ed71335-4d3b-45a6-9587-8df9743d0cf8"; 
+
+    await fetch(N8N_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        phone: phone, 
+        message: message
+      }),
+    });
+    
+    console.log("Secure alert sent to n8n!");
+  } catch (error) {
+    console.error("Failed to trigger n8n workflow:", error);
+  }
+}
 
 export default router;
