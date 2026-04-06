@@ -4,9 +4,27 @@ import { requireAuth } from "../middleware/auth.js";
 import { Expo } from "expo-server-sdk";
 import { sendEmail } from "../utils/emailService.js";
 import { getNewComplaintTemplate } from "../utils/emailTemplates.js";
+import { google } from "googleapis";
+import stream from "stream";
+import multer from "multer";
 
 const router = express.Router();
 const expo = new Expo();
+
+// Set up Multer to keep the image in memory temporarily
+const upload = multer({ storage: multer.memoryStorage() });
+
+// 🟢 Authenticate your Google Bot
+const KEYFILEPATH = "./google-credentials.json"; // Path to your downloaded JSON file
+const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
+
+const auth = new google.auth.GoogleAuth({
+  keyFile: KEYFILEPATH,
+  scopes: SCOPES,
+});
+
+const driveService = google.drive({ version: "v3", auth });
+const GOOGLE_DRIVE_FOLDER_ID = "1ekZ8SEYK41KaDn6Ot4RTZVjOPMnsAEw-"; // From Phase 2
 
 // SUBMIT COMPLAINT
 router.post("/complaints", requireAuth(), async (req, res) => {
@@ -428,5 +446,45 @@ const N8N_WEBHOOK_URL = "https://somatopleuric-wynona-leonine.ngrok-free.dev/web
     console.error("Failed to trigger n8n workflow:", error);
   }
 }
+
+router.post("/upload-image", upload.single("image"), async(req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No image file provided" });
+    }
+
+    // Convert the image buffer into a readable stream for Google Drive
+    const bufferStream = new stream.PassThrough();
+    bufferStream.end(req.file.buffer);
+
+    // 1. Upload the file to Google Drive
+    const { data } = await driveService.files.create({
+      media: {
+        mimeType: req.file.mimetype,
+        body: bufferStream,
+      },
+      requestBody: {
+        name: `complaint_${Date.now()}_${req.file.originalname}`,
+        parents: [GOOGLE_DRIVE_FOLDER_ID],
+      },
+      fields: "id",
+    });
+
+    // 2. Make the file readable so the Admin App can display it
+    await driveService.permissions.create({
+      fileId: data.id,
+      requestBody: { role: "reader", type: "anyone" },
+    });
+
+    // 3. Generate the magic direct-display URL
+    const directImageUrl = `https://drive.google.com/uc?id=${data.id}`;
+
+    // Send this URL back to save in your Neon database!
+    res.json({ success: true, imageUrl: directImageUrl });
+  } catch (error) {
+    console.error("Google Drive Upload Error:", error);
+    res.status(500).json({ error: "Failed to upload image to Drive" });
+  }
+})
 
 export default router;

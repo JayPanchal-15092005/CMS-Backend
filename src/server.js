@@ -11,18 +11,18 @@ dotenv.config();
 const app = express();
 
 // Initialize ImageKit
-let imagekit;
-try {
-  if (process.env.IMAGEKIT_PUBLIC_KEY) {
-    imagekit = new ImageKit({
-      publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
-      privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-      urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT
-    });
-  }
-} catch (err) {
-  console.error("❌ ImageKit init failed:", err.message);
-}
+// let imagekit;
+// try {
+//   if (process.env.IMAGEKIT_PUBLIC_KEY) {
+//     imagekit = new ImageKit({
+//       publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+//       privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+//       urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT
+//     });
+//   }
+// } catch (err) {
+//   console.error("❌ ImageKit init failed:", err.message);
+// }
 
 // Middleware
 app.use(cors());
@@ -37,16 +37,17 @@ pool.query("SELECT 1").then(() => console.log("✅ Database connected"));
 // =========================
 app.get("/health", (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
 
-app.get("/api/imagekit/auth", (req, res) => {
-  try {
-    if (!imagekit) return res.status(500).json({ error: "ImageKit missing" });
-    const authenticationParameters = imagekit.getAuthenticationParameters();
-    res.json(authenticationParameters);
-  } catch (err) {
-    console.error("ImageKit Auth Error:", err);
-    res.status(500).json({ error: "Could not generate auth parameters" });
-  }
-});
+// app.get("/api/imagekit/auth", (req, res) => {
+//   try {
+//     if (!imagekit) return res.status(500).json({ error: "ImageKit missing" });
+//     const authenticationParameters = imagekit.getAuthenticationParameters();
+//     res.json(authenticationParameters);
+//   } catch (err) {
+//     console.error("ImageKit Auth Error:", err);
+//     res.status(500).json({ error: "Could not generate auth parameters" });
+//   }
+// });
+
 
 // =========================
 // MOUNTED ROUTES
