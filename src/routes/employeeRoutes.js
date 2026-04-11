@@ -19,8 +19,12 @@ const KEYFILEPATH = "./google-credentials.json"; // Path to your downloaded JSON
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 
 const auth = new google.auth.GoogleAuth({
-  keyFile: KEYFILEPATH,
-  scopes: SCOPES,
+  credentials: {
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    // The replace function fixes the line breaks that environment variables sometimes mess up
+    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  },
+  scopes: ["https://www.googleapis.com/auth/drive.file"]
 });
 
 const driveService = google.drive({ version: "v3", auth });
