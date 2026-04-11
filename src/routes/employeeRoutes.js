@@ -28,7 +28,7 @@ const auth = new google.auth.GoogleAuth({
 });
 
 const driveService = google.drive({ version: "v3", auth });
-const GOOGLE_DRIVE_FOLDER_ID = "1ekZ8SEYK41KaDn6Ot4RTZVjOPMnsAEw-"; // From Phase 2
+const GOOGLE_DRIVE_FOLDER_ID = "0AINzSmTfk3w3Uk9PVA"; // From Phase 2
 
 // SUBMIT COMPLAINT
 router.post("/complaints", requireAuth(), async (req, res) => {
@@ -472,6 +472,7 @@ router.post("/upload-image", upload.single("image"), async(req, res) => {
         parents: [GOOGLE_DRIVE_FOLDER_ID],
       },
       fields: "id",
+      supportsAllDrives: true
     });
 
     // 2. Make the file readable so the Admin App can display it
