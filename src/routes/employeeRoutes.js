@@ -479,6 +479,7 @@ router.post("/upload-image", upload.single("image"), async(req, res) => {
     await driveService.permissions.create({
       fileId: data.id,
       requestBody: { role: "reader", type: "anyone" },
+      supportsAllDrives: true
     });
 
     // 3. Generate the magic direct-display URL
