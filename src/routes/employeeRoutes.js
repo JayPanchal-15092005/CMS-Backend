@@ -440,14 +440,18 @@ const N8N_WEBHOOK_URL = "https://somatopleuric-wynona-leonine.ngrok-free.dev/web
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        phone: phone, 
-        message: message
+        name: name || "Unknown",                // Variable {{1}}
+        email: email || "No Email",             // Variable {{2}}
+        department: department || "General",    // Variable {{3}}
+        priority: priority || "Medium",         // Variable {{4}}
+        issue: detail || "No details provided", // Variable {{5}}
+        location: location || "Not specified"   // Variable {{6}}
       }),
     });
     
-    console.log("Secure alert sent to n8n!");
-  } catch (error) {
-    console.error("Failed to trigger n8n workflow:", error);
+    console.log("WhatsApp alert triggered!");
+  } catch (webhookerror) {
+    console.error("Error triggering WhatsApp:", webhookerror);
   }
 }
 
