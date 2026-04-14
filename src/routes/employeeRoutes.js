@@ -432,7 +432,7 @@ async function sendN8nWhatsAppAlert(phone, message) {
     // ⚠️ Make sure this matches the Production URL you copied from n8n
     // const N8N_WEBHOOK_URL = "http://localhost:5678/webhook/3ed71335-4d3b-45a6-9587-8df9743d0cf8"; 
     // 🟢 The Final, Perfect URL
-const N8N_WEBHOOK_URL = "https://somatopleuric-wynona-leonine.ngrok-free.dev/webhook/3ed71335-4d3b-45a6-9587-8df9743d0cf8";
+const N8N_WEBHOOK_URL = "https://somatopleuric-wynona-leonine.ngrok-free.dev /webhook/3ed71335-4d3b-45a6-9587-8df9743d0cf8";
 
     await fetch(N8N_WEBHOOK_URL, {
       method: "POST",
