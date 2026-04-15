@@ -427,29 +427,26 @@ router.get("/mob-recharges", requireAuth(), async (req, res) => {
 });
 
 // 🟢 The secure n8n Webhook Caller
-async function sendN8nWhatsAppAlert(phone, message) {
-  try {
-    // ⚠️ Make sure this matches the Production URL you copied from n8n
-    // const N8N_WEBHOOK_URL = "http://localhost:5678/webhook/3ed71335-4d3b-45a6-9587-8df9743d0cf8"; 
-    // 🟢 The Final, Perfect URL
-const N8N_WEBHOOK_URL = "https://somatopleuric-wynona-leonine.ngrok-free.dev/webhook/3ed71335-4d3b-45a6-9587-8df9743d0cf8";
+// 🟢 Updated Function: Notice it now expects a 'data' object
+async function sendN8nWhatsAppAlert(data) {
+  const N8N_WEBHOOK_URL = "https://somatopleuric-wynona-leonine.ngrok-free.dev/webhook/3ed71335-4d3b-45a6-9587-8df9743d0cf8";
 
+  try {
     await fetch(N8N_WEBHOOK_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        name: name || "Unknown",                // Variable {{1}}
-        email: email || "No Email",             // Variable {{2}}
-        department: department || "General",    // Variable {{3}}
-        priority: priority || "Medium",         // Variable {{4}}
-        issue: detail || "No details provided", // Variable {{5}}
-        location: location || "Not specified"   // Variable {{6}}
+        name: data.name || "Unknown",
+        email: data.email || "No Email",
+        department: data.department || "General",
+        priority: data.priority || "Medium",
+        issue: data.detail || "No details provided",
+        location: data.location || "Not specified"
       }),
     });
-    
-    console.log("WhatsApp alert triggered!");
+    console.log("WhatsApp alert payload sent to n8n!");
   } catch (webhookerror) {
     console.error("Error triggering WhatsApp:", webhookerror);
   }
