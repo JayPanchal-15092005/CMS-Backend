@@ -195,7 +195,7 @@ router.get("/reports", adminAuth, async (req, res) => {
 });
 
 // GET All Daily Reports for Admin
-router.get("/daily-reports", requireAuth(), async (req, res) => {
+router.get("/daily-reports", adminAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT * FROM daily_reports ORDER BY created_at DESC`
@@ -208,7 +208,7 @@ router.get("/daily-reports", requireAuth(), async (req, res) => {
 });
 
 // GET All Stationery Requests with their Items
-router.get("/stationery-requests", requireAuth(), async (req, res) => {
+router.get("/stationery-requests", adminAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT sr.*, 
@@ -226,7 +226,7 @@ router.get("/stationery-requests", requireAuth(), async (req, res) => {
 });
 
 // GET All Mobile Recharges for Admin
-router.get("/mob-recharges", requireAuth(), async (req, res) => {
+router.get("/mob-recharges", adminAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT * FROM mob_recharge_requests ORDER BY created_at DESC`
