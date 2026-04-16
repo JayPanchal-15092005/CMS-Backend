@@ -195,6 +195,7 @@ router.get("/reports", adminAuth, async (req, res) => {
 });
 
 // GET All Daily Reports for Admin
+// 🟢 Notice the 'adminAuth' middleware inserted here
 router.get("/daily-reports", adminAuth, async (req, res) => {
   try {
     const result = await pool.query(
