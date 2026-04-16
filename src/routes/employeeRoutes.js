@@ -369,6 +369,29 @@ router.post("/devices/register", requireAuth(), async (req, res) => {
 });
 
 // POST: Submit Daily Report
+// router.post("/daily-reports", requireAuth(), async (req, res) => {
+//   try {
+//     const userId = req.auth.userId;
+//     const { employee_name, work_details } = req.body;
+//     const employee_email = req.userEmail; // Safely pulled from Firebase token!
+
+//     if (!work_details) {
+//       return res.status(400).json({ error: "Work details are required" });
+//     }
+
+//     const result = await pool.query(
+//       `INSERT INTO daily_reports (firebase_uid, employee_name, employee_email, work_details) 
+//        VALUES ($1, $2, $3, $4) RETURNING *`,
+//       [userId, employee_name || "Employee", employee_email, work_details],
+//     );
+
+//     res.status(201).json({ success: true, report: result.rows[0] });
+//   } catch (err) {
+//     console.error("Daily Report Submit Error:", err);
+//     res.status(500).json({ error: "internal_server_error" });
+//   }
+// });
+
 router.post("/daily-reports", requireAuth(), async (req, res) => {
   try {
     const userId = req.auth.userId;
@@ -385,7 +408,34 @@ router.post("/daily-reports", requireAuth(), async (req, res) => {
       [userId, employee_name || "Employee", employee_email, work_details],
     );
 
-    res.status(201).json({ success: true, report: result.rows[0] });
+    const report = result.rows[0];
+
+    // 🟢 NEW: Push Notification Logic
+    try {
+      const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
+      const messages = [];
+
+      for (const device of adminDevices.rows) {
+        if (!Expo.isExpoPushToken(device.expo_push_token)) continue;
+
+        messages.push({
+          to: device.expo_push_token,
+          sound: "default",
+          title: "📄 New Daily Report",
+          body: `A new daily report was submitted by ${employee_name || "Employee"}.`,
+          data: { id: report.id, screen: "daily-report-details" },
+        });
+      }
+
+      if (messages.length > 0) {
+        await expo.sendPushNotificationsAsync(messages);
+        console.log(`✅ Sent ${messages.length} Daily Report notifications to Admins`);
+      }
+    } catch (notifError) {
+      console.error("❌ Notification Error:", notifError);
+    }
+
+    res.status(201).json({ success: true, report: report });
   } catch (err) {
     console.error("Daily Report Submit Error:", err);
     res.status(500).json({ error: "internal_server_error" });
@@ -416,6 +466,50 @@ router.get("/daily-reports", requireAuth(), async (req, res) => {
 });
 
 // POST: Submit a stationery request (with transactional line items)
+// router.post("/stationery-requests", requireAuth(), async (req, res) => {
+//   let client;
+//   try {
+//     client = await pool.connect();
+//     await client.query("BEGIN"); // 🟢 Start transactional commit
+
+//     const userId = req.auth.userId;
+//     const { items, employee_name } = req.body; // Array of { name, quantity }
+//     const employee_email = req.userEmail;
+
+//     if (!items || items.length === 0) {
+//       await client.query("ROLLBACK"); // Cancel if no items
+//       return res.status(400).json({ error: "At least one item is required." });
+//     }
+
+//     // 1. Create the main request entry
+//     const requestResult = await client.query(
+//       `INSERT INTO stationery_requests (firebase_uid, employee_name, employee_email)
+//        VALUES ($1, $2, $3) RETURNING id`,
+//       [userId, employee_name, employee_email],
+//     );
+//     const requestId = requestResult.rows[0].id;
+
+//     // 2. Insert all the items for this request
+//     const itemQueries = items.map((item) =>
+//       client.query(
+//         `INSERT INTO stationery_request_items (request_id, item_name, quantity) 
+//            VALUES ($1, $2, $3)`,
+//         [requestId, item.name, parseInt(item.quantity)],
+//       ),
+//     );
+//     await Promise.all(itemQueries); // Run all item inserts
+
+//     await client.query("COMMIT"); // 🟢 Securely save all changes
+//     res.status(201).json({ success: true, requestId });
+//   } catch (err) {
+//     if (client) await client.query("ROLLBACK"); // Abort on any error
+//     console.error("Stationery Request Error:", err);
+//     res.status(500).json({ error: "internal_server_error" });
+//   } finally {
+//     if (client) client.release();
+//   }
+// });
+
 router.post("/stationery-requests", requireAuth(), async (req, res) => {
   let client;
   try {
@@ -443,13 +537,39 @@ router.post("/stationery-requests", requireAuth(), async (req, res) => {
     const itemQueries = items.map((item) =>
       client.query(
         `INSERT INTO stationery_request_items (request_id, item_name, quantity) 
-           VALUES ($1, $2, $3)`,
+            VALUES ($1, $2, $3)`,
         [requestId, item.name, parseInt(item.quantity)],
       ),
     );
     await Promise.all(itemQueries); // Run all item inserts
 
     await client.query("COMMIT"); // 🟢 Securely save all changes
+
+    // 🟢 NEW: Push Notification Logic
+    try {
+      const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
+      const messages = [];
+
+      for (const device of adminDevices.rows) {
+        if (!Expo.isExpoPushToken(device.expo_push_token)) continue;
+
+        messages.push({
+          to: device.expo_push_token,
+          sound: "default",
+          title: "✏️ New Stationery Request",
+          body: `A new stationery form was filled by ${employee_name || "Employee"}.`,
+          data: { id: requestId, screen: "stationery-details" },
+        });
+      }
+
+      if (messages.length > 0) {
+        await expo.sendPushNotificationsAsync(messages);
+        console.log(`✅ Sent ${messages.length} Stationery notifications to Admins`);
+      }
+    } catch (notifError) {
+      console.error("❌ Notification Error:", notifError);
+    }
+
     res.status(201).json({ success: true, requestId });
   } catch (err) {
     if (client) await client.query("ROLLBACK"); // Abort on any error
@@ -487,6 +607,44 @@ router.get("/stationery-requests", requireAuth(), async (req, res) => {
 });
 
 // POST: Submit a Mobile Recharge Request
+// router.post("/mob-recharges", requireAuth(), async (req, res) => {
+//   try {
+//     const userId = req.auth.userId;
+//     const employee_email = req.userEmail;
+    
+//     // Grabbing all the fields sent from the phone app
+//     const { 
+//       employee_name, mobile_no, operator, recharge_amount, 
+//       department, approved_by_hr, last_recharge_date 
+//     } = req.body;
+
+//     if (!mobile_no || !recharge_amount) {
+//       return res.status(400).json({ error: "Mobile number and amount are required" });
+//     }
+
+//     const result = await pool.query(
+//       `INSERT INTO mob_recharge_requests 
+//         (firebase_uid, employee_name, employee_email, mobile_no, operator, recharge_amount, department, approved_by_hr, last_recharge_date) 
+//        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+//       [userId, employee_name, employee_email, mobile_no, operator, recharge_amount, department, approved_by_hr, last_recharge_date]
+//     );
+
+//     // 🟢 FIRE THE WHATSAPP ALERT AUTOMATICALLY
+//     // Pass the destination phone number and the exact message you want them to see
+//     const alertMessage = `New Mobile Recharge Request!\nEmployee: ${employee_name}\nAmount: ₹${recharge_amount}`;
+    
+//     // Replace with your verified Meta test phone number (e.g., "919876543210")
+//     await sendN8nWhatsAppAlert("918347039945", alertMessage);
+
+//     res.status(201).json({ success: true, requestId: result.rows[0].id });
+
+    
+//   } catch (err) {
+//     console.error("Mob Recharge Submit Error:", err);
+//     res.status(500).json({ error: "internal_server_error" });
+//   }
+// });
+
 router.post("/mob-recharges", requireAuth(), async (req, res) => {
   try {
     const userId = req.auth.userId;
@@ -509,16 +667,44 @@ router.post("/mob-recharges", requireAuth(), async (req, res) => {
       [userId, employee_name, employee_email, mobile_no, operator, recharge_amount, department, approved_by_hr, last_recharge_date]
     );
 
+    const requestId = result.rows[0].id;
+
     // 🟢 FIRE THE WHATSAPP ALERT AUTOMATICALLY
-    // Pass the destination phone number and the exact message you want them to see
     const alertMessage = `New Mobile Recharge Request!\nEmployee: ${employee_name}\nAmount: ₹${recharge_amount}`;
     
-    // Replace with your verified Meta test phone number (e.g., "919876543210")
-    await sendN8nWhatsAppAlert("918347039945", alertMessage);
+    try {
+      await sendN8nWhatsAppAlert("918347039945", alertMessage);
+    } catch (whatsappError) {
+      console.error("WhatsApp trigger failed:", whatsappError);
+    }
 
-    res.status(201).json({ success: true, requestId: result.rows[0].id });
+    // 🟢 NEW: Push Notification Logic
+    try {
+      const adminDevices = await pool.query("SELECT expo_push_token FROM admin_devices");
+      const messages = [];
 
-    
+      for (const device of adminDevices.rows) {
+        if (!Expo.isExpoPushToken(device.expo_push_token)) continue;
+
+        messages.push({
+          to: device.expo_push_token,
+          sound: "default",
+          title: "📱 Mobile Recharge Request",
+          body: `A new mobile recharge form was filled for ${employee_name || "Employee"}.`,
+          data: { id: requestId, screen: "recharge-details" },
+        });
+      }
+
+      if (messages.length > 0) {
+        await expo.sendPushNotificationsAsync(messages);
+        console.log(`✅ Sent ${messages.length} Mob Recharge notifications to Admins`);
+      }
+    } catch (notifError) {
+      console.error("❌ Notification Error:", notifError);
+    }
+
+    res.status(201).json({ success: true, requestId: requestId });
+
   } catch (err) {
     console.error("Mob Recharge Submit Error:", err);
     res.status(500).json({ error: "internal_server_error" });

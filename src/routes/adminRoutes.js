@@ -194,4 +194,48 @@ router.get("/reports", adminAuth, async (req, res) => {
   }
 });
 
+// GET All Daily Reports for Admin
+router.get("/daily-reports", requireAuth(), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM daily_reports ORDER BY created_at DESC`
+    );
+    res.status(200).json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Error fetching daily reports:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
+// GET All Stationery Requests with their Items
+router.get("/stationery-requests", requireAuth(), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT sr.*, 
+        COALESCE(json_agg(sri.*) FILTER (WHERE sri.id IS NOT NULL), '[]') as items
+       FROM stationery_requests sr
+       LEFT JOIN stationery_request_items sri ON sr.id = sri.request_id
+       GROUP BY sr.id
+       ORDER BY sr.created_at DESC`
+    );
+    res.status(200).json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Error fetching stationery requests:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
+// GET All Mobile Recharges for Admin
+router.get("/mob-recharges", requireAuth(), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM mob_recharge_requests ORDER BY created_at DESC`
+    );
+    res.status(200).json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Error fetching mob recharges:", err);
+    res.status(500).json({ error: "internal_server_error" });
+  }
+});
+
 export default router;
