@@ -227,7 +227,7 @@ router.get("/stationery-requests", adminAuth, async (req, res) => {
   }
 });
 
-// GET All Mobile Recharges for Admin
+// 🟢 Changed to use adminAuth!
 router.get("/mob-recharges", adminAuth, async (req, res) => {
   try {
     const result = await pool.query(
