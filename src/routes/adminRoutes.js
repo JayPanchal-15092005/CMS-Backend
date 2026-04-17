@@ -209,6 +209,7 @@ router.get("/daily-reports", adminAuth, async (req, res) => {
 });
 
 // GET All Stationery Requests with their Items
+// 🟢 Changed to use adminAuth!
 router.get("/stationery-requests", adminAuth, async (req, res) => {
   try {
     const result = await pool.query(
