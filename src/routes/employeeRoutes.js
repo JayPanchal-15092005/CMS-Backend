@@ -800,4 +800,59 @@ router.post("/upload-image", upload.single("image"), async(req, res) => {
   }
 })
 
+router.post("/send-quotation", upload.single("pdfDoc"), async (req ,res) => {
+  try {
+    const clientName = req.body.clientName;
+    const pdfFile = req.file;
+
+    if (!pdfFile) {
+      return res.status(400).json({ error: "No PDF file received" });
+    }
+
+    // 1. Setup the Email Details
+    // Replace this with your Sir's actual email, or put it in your .env file!
+    const managerEmail = process.env.MANAGER_EMAIL || "itsupport@gujaratinfotech.com"; 
+    const subject = `New Quotation Generated: ${clientName}`;
+
+    // 2. Format a professional HTML Email body
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px;">
+          New Quotation Alert
+        </h2>
+        <p style="font-size: 16px;">Hello Bhargav Sir,</p>
+        <p style="font-size: 15px;">
+          A new BenQ Interactive Panel quotation has just been generated for <strong>${clientName}</strong>.
+        </p>
+        <p style="font-size: 15px;">
+          Please find the official Purchase Order document attached to this email for your review.
+        </p>
+        <br/>
+        <p style="font-size: 14px; color: #555;">
+          Best regards,<br/>
+          <strong>GIL IT Support App (CMS)</strong>
+        </p>
+      </div>
+    `;
+
+    // 3. Package the PDF Attachment
+    const attachments = [
+      {
+        filename: pdfFile.originalname, // This will be "BenQ Po 05-05-2026.pdf"
+        content: pdfFile.buffer,        // The raw file data
+        contentType: "application/pdf",
+      },
+    ];
+
+    // 4. Send the email using your updated service!
+    await sendEmail(managerEmail, subject, htmlContent, attachments);
+
+    // 5. Send success response back to the mobile app
+    res.status(200).json({ success: true, message: "Quotation emailed to manager successfully!" });
+  } catch (error) {
+    console.error("Error sending quotation:", error);
+    res.status(500).json({ success: false, error: "Failed to send quotation email" });
+  }
+})
+
 export default router;

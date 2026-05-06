@@ -1,7 +1,3 @@
-/* =========================
-   EMAIL CONFIGURATION (Nodemailer)
-========================= */
-// const nodemailer = require("nodemailer");
 import nodemailer from "nodemailer";
 
 // Create reusable transporter object
@@ -10,22 +6,24 @@ const transporter = nodemailer.createTransport({
   port: parseInt(process.env.SMTP_PORT) || 587,
   secure: false, // true for 465, false for other ports
   auth: {
-    user: process.env.EMAIL_ADDRESS, // jayp93393@gmail.com
-    pass: process.env.EMAIL_PASSWORD, // Your App Password
+    user: process.env.EMAIL_ADDRESS,
+    pass: process.env.EMAIL_PASSWORD,
   },
 });
 
 // Helper Function: Send Email
-export const sendEmail = async (to, subject, htmlContent) => {
+export const sendEmail = async (to, subject, htmlContent, attachments = []) => {
   try {
     const info = await transporter.sendMail({
       from: `"CMS System" <${process.env.EMAIL_ADDRESS}>`, 
       to: to,
       subject: subject,
       html: htmlContent, 
+      attachments: attachments,
     });
     console.log("📧 Email sent: %s", info.messageId);
   } catch (error) {
     console.error("❌ Email Error:", error);
+    throw error; // Throwing error so the route knows if it failed
   }
 };
