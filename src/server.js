@@ -25,7 +25,10 @@ const app = express();
 // }
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: '*', // Allows your mobile app to connect
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+}));
 app.use(express.json());
 
 // Initialize DB
