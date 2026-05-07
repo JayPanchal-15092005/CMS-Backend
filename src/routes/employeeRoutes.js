@@ -802,7 +802,7 @@ router.post("/upload-image", upload.single("image"), async(req, res) => {
 
 router.post("/send-quotation", upload.single("pdfDoc"), async (req ,res) => {
   try {
-    const clientName = req.body.clientName;
+    const { clientName, address, model, size, qty, unitPrice, totalPrice } = req.body;
     const pdfFile = req.file;
 
     if (!pdfFile) {
@@ -847,8 +847,17 @@ router.post("/send-quotation", upload.single("pdfDoc"), async (req ,res) => {
     // 4. Send the email using your updated service!
     await sendEmail(managerEmail, subject, htmlContent, attachments);
 
+    // 🟢 3. SAVE TO NEON DATABASE
+    const insertQuery = `
+      INSERT INTO quotations (customer_name, address, model, size, quantity, unit_price, total_price)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `;
+    const values = [clientName, address, model, size, qty, unitPrice, totalPrice];
+    
+    await pool.query(insertQuery, values);
+
     // 5. Send success response back to the mobile app
-    res.status(200).json({ success: true, message: "Quotation emailed to manager successfully!" });
+    res.status(200).json({ success: true, message: "Email sent & Data Saved!" });
   } catch (error) {
     console.error("Error sending quotation:", error);
     res.status(500).json({ success: false, error: "Failed to send quotation email" });
