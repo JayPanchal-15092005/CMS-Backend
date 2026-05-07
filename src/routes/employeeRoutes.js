@@ -849,8 +849,8 @@ router.post("/send-quotation", upload.single("pdfDoc"), async (req ,res) => {
 
     // 🟢 3. SAVE TO NEON DATABASE
     const insertQuery = `
-      INSERT INTO quotations (customer_name, address, model, size, quantity, unit_price, total_price)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO quotations (customer_name, address, model, size, quantity, unit_price, total_price, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')
     `;
     const values = [clientName, address, model, size, qty, unitPrice, totalPrice];
     
