@@ -838,7 +838,7 @@ router.post("/send-quotation", upload.single("pdfDoc"), async (req ,res) => {
     // 3. Package the PDF Attachment
     const attachments = [
       {
-        filename: pdfFile.originalname, // This will be "BenQ Po 05-05-2026.pdf"
+        filename: decodeURIComponent(pdfFile.originalname), // This will be "BenQ Po 05-05-2026.pdf"
         content: pdfFile.buffer,        // The raw file data
         contentType: "application/pdf",
       },
