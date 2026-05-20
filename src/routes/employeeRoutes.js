@@ -249,7 +249,7 @@ router.post("/complaints", requireAuth(), async (req, res) => {
         assets: JSON.stringify(req.body.assets || []),
       });
       // Send email (no await to prevent blocking)
-      sendEmail(
+      await sendEmail(
         "Itsupport@gujaratinfotech.com",
         "New Complaint Received",
         htmlContent,
